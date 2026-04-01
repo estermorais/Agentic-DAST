@@ -1,7 +1,7 @@
 %% ============================================================
 %% Artigo — Agentic DAST
-%% Ester Morais Neves — CEFET-MG — Março de 2026
-%% Formato: artigo acadêmico, duas colunas, estilo SBC/IEEE
+%% Ester Morais Neves — CEFET-MG — 2026
+%% Formato: artigo acadêmico, duas colunas, template SBC
 %% Compilar com pdfLaTeX (Overleaf: compilador padrão)
 %% ============================================================
 \documentclass[
@@ -27,7 +27,6 @@
 \usepackage{setspace}
 \usepackage{titlesec}
 
-% Espaçamento de seções compacto (estilo artigo)
 \titlespacing*{\section}{0pt}{8pt}{4pt}
 \titlespacing*{\subsection}{0pt}{6pt}{3pt}
 
@@ -62,6 +61,10 @@
     tabsize=2
 }
 \lstset{style=artigostyle}
+
+%% ---- Figuras -------------------------------------------------
+\usepackage{graphicx}
+\usepackage{caption}
 
 %% ---- Hyperlinks ----------------------------------------------
 \usepackage{hyperref}
@@ -101,7 +104,7 @@
     \texttt{tymburiba@cefetmg.br}
 }
 
-\date{Março de 2026}
+\date{2026}
 
 %% ============================================================
 \begin{document}
@@ -111,27 +114,30 @@
 \thispagestyle{empty}
 
 % =============================================================
-% Resumo e Abstract
+% Resumo — escrito por último, seguindo a estrutura de 4 passos:
+% (1) Contexto/Problema, (2) Solução, (3) Principal Resultado,
+% (4) Impacto/Implicação
 % =============================================================
 
 \begin{abstract}
 Ferramentas de \textit{Dynamic Application Security Testing} (DAST)
-tradicionais são incapazes de navegar os estados internos de
-\textit{Single Page Applications} (SPAs) ou de detectar vulnerabilidades
-que exigem compreensão semântica, como Lógica de Negócio (BLV),
-XSS armazenado via campos dinâmicos, ataques a JWT e exposição de dados
-sensíveis. Este artigo propõe o \textbf{Agentic DAST}, um
-\textit{framework} que integra raciocínio semântico de Grandes Modelos
-de Linguagem (LLMs) com automação de navegadores via Puppeteer e padrão
-Screenplay, operando em um \textit{loop} ReAct autônomo. O
-\textit{framework} é estruturado em quatro módulos: Percepção (extrator
-DOM via CDP), Cognitivo (agente LLM com \textit{loop} ReAct), Executor
-(Screenplay + Puppeteer com \textit{Abuse Cases} predefinidos) e Auditoria
-(OWASP ZAP \textit{daemon}). A validação empírica será conduzida sobre o
-OWASP Juice Shop em experimento comparativo com três cenários, avaliando
-\textit{Recall}, \textit{Precision} e F1-\textit{Score} na detecção de
-múltiplas categorias de vulnerabilidades. Espera-se demonstrar superioridade
-estatisticamente significativa do Agentic DAST frente ao OWASP ZAP tradicional.
+tradicionais falham em dois aspectos críticos: são incapazes de navegar
+os estados internos de \textit{Single Page Applications} (SPAs) e não
+detectam vulnerabilidades que exigem compreensão semântica do domínio,
+como Lógica de Negócio, IDOR, XSS armazenado e ataques a JWT.
+Este artigo propõe o \textbf{Agentic DAST}, um \textit{framework}
+que integra raciocínio semântico de Grandes Modelos de Linguagem (LLMs)
+com automação de navegadores via Puppeteer e padrão Screenplay, operando
+em um \textit{loop} ReAct autônomo estruturado em quatro módulos:
+Percepção, Cognitivo, Executor e Auditoria.
+% [A preencher após os experimentos]
+A validação empírica é conduzida sobre o OWASP Juice Shop em experimento
+comparativo com três cenários (ZAP tradicional, ZAP guiado por E2E e
+Agentic DAST autônomo), avaliando \textit{Recall}, \textit{Precision} e
+F1-\textit{Score} por categoria de vulnerabilidade.
+Os resultados têm potencial de evidenciar que agentes LLM superam
+scanners tradicionais na detecção de vulnerabilidades semânticas em SPAs,
+abrindo caminho para integração em \textit{pipelines} de DevSecOps.
 
 \bigskip\noindent
 \textbf{Palavras-chave:}
@@ -141,21 +147,22 @@ XSS, JWT, ReAct, Screenplay Pattern, OWASP Juice Shop.
 
 \selectlanguage{english}
 \begin{abstract}
-Traditional Dynamic Application Security Testing (DAST) tools fail to
-navigate the internal states of Single Page Applications (SPAs) or to
-detect vulnerabilities requiring semantic understanding, such as Business
-Logic Vulnerabilities (BLVs), stored XSS via dynamic fields, JWT attacks,
-and sensitive data exposure. This paper proposes \textbf{Agentic DAST},
-a framework that integrates semantic reasoning from Large Language Models
-(LLMs) with browser automation via Puppeteer and the Screenplay Pattern,
-operating within an autonomous ReAct loop. The framework comprises four
-modules: Perception (DOM extractor via CDP), Cognitive (LLM agent with
-ReAct loop), Executor (Screenplay + Puppeteer with predefined Abuse Cases),
-and Audit (OWASP ZAP daemon). Empirical validation will be conducted on
-OWASP Juice Shop through a three-scenario comparative experiment, evaluating
-Recall, Precision, and F1-Score across multiple vulnerability categories.
-The results are expected to demonstrate statistically significant superiority
-of Agentic DAST over traditional OWASP ZAP.
+Traditional Dynamic Application Security Testing (DAST) tools fail on
+two critical fronts: they cannot navigate the internal states of Single
+Page Applications (SPAs), and they cannot detect vulnerabilities requiring
+semantic domain understanding, such as Business Logic, IDOR, stored XSS,
+and JWT attacks. This paper proposes \textbf{Agentic DAST}, a framework
+that integrates semantic reasoning from Large Language Models (LLMs) with
+browser automation via Puppeteer and the Screenplay Pattern, operating
+within an autonomous ReAct loop structured in four modules: Perception,
+Cognitive, Executor, and Audit.
+% [To be updated after experiments]
+Empirical validation is conducted on OWASP Juice Shop through a
+three-scenario comparative experiment (traditional ZAP, E2E-guided ZAP,
+and autonomous Agentic DAST), evaluating Recall, Precision, and F1-Score
+per vulnerability category. Results are expected to demonstrate that LLM
+agents outperform traditional scanners in detecting semantic vulnerabilities
+in SPAs, paving the way for integration into DevSecOps pipelines.
 
 \bigskip\noindent
 \textbf{Keywords:}
@@ -168,280 +175,484 @@ XSS, JWT, ReAct, Screenplay Pattern, OWASP Juice Shop.
 \section{Introdução}
 % =============================================================
 
-As aplicações web contemporâneas migraram progressivamente para o
-paradigma das \textit{Single Page Applications} (SPAs). \textit{Frameworks}
-como Angular, React e Vue.js promoveram uma inversão arquitetural na
-qual toda a navegação é controlada por JavaScript no lado do cliente,
-com conteúdo injetado dinamicamente no DOM por chamadas assíncronas a
-APIs \cite{stackhawk2024, getastra2024}.
+% --- Parte 1: Contexto ----------------------------------------
+A segurança de aplicações web tornou-se um requisito crítico no ciclo de
+desenvolvimento de \textit{software}. O custo médio de uma violação de
+dados em 2024 atingiu US\$\,4,88 milhões, segundo o relatório da IBM
+\cite{ibm2024}, e a OWASP estima que mais de 70\% das vulnerabilidades
+exploradas em produção poderiam ter sido detectadas na fase de testes
+\cite{owasp2021top10}. O \textit{Dynamic Application Security Testing}
+(DAST) é a categoria de ferramentas que testa aplicações em execução,
+simulando um atacante externo sem acesso ao código-fonte.
 
-Essa evolução criou uma lacuna crítica nas metodologias de testes
-dinâmicos de segurança. Ferramentas DAST consolidadas, como o OWASP
-ZAP, utilizam \textit{crawlers} que analisam estaticamente o HTML em
-busca de âncoras \texttt{<a>} para mapear a superfície de ataque
-\cite{brightsec2024}. Diante de uma SPA, esses \textit{scanners}
-percebem uma única página opaca, sem capacidade de explorar os estados
-internos da aplicação.
+% --- Parte 2: Problema ----------------------------------------
+A transição da web para o paradigma das \textit{Single Page Applications}
+(SPAs) --- dominadas por \textit{frameworks} como Angular, React e
+Vue.js --- criou uma lacuna crítica que as ferramentas DAST consolidadas
+não conseguem endereçar \cite{brightsec2024, stackhawk2024}. Em uma SPA,
+toda a navegação é controlada por JavaScript no lado do cliente: não há
+recarregamento de página, os estados internos (painéis administrativos,
+fluxos de \textit{checkout}, carrinhos de compras) são alcançados por
+interações com o DOM, e a superfície de ataque real só é revelada após
+execução de código JavaScript. Ferramentas como o OWASP ZAP utilizam
+\textit{crawlers} que analisam estaticamente o HTML em busca de âncoras
+\texttt{<a>}, percebendo uma SPA como uma única página opaca
+\cite{brightsec2024}.
 
-Vulnerabilidades de Lógica de Negócio (BLVs) decorrem de falhas no
-\textit{design} dos processos, e não de erros de codificação de baixo
-nível \cite{portswigger2024}. Exemplos incluem: manipulação de preço
-via API, IDOR (\textit{Insecure Direct Object Reference}), acesso a
-rotas administrativas sem privilégios e abuso de condições de corrida
-em fluxos de pagamento. Detectar tais falhas exige compreensão do
-domínio da aplicação, algo estruturalmente impossível para ferramentas
-baseadas em correspondência de padrões \cite{karadbhajne2025}.
+O problema é amplificado por uma segunda dimensão: a incapacidade de
+interpretação semântica. Vulnerabilidades como Lógica de Negócio
+(\textit{Business Logic Vulnerabilities} --- BLVs), IDOR
+(\textit{Insecure Direct Object Reference}), XSS armazenado em campos
+dinâmicos, adulteração de JWT e exposição de dados sensíveis em
+\textit{endpoints} não documentados não decorrem de padrões sintáticos
+detectáveis por expressões regulares ou por injeção de \textit{payloads}
+clássicos \cite{portswigger2024, karadbhajne2025}. Elas exigem
+compreensão do \textit{propósito} da aplicação: saber que uma quantidade
+de produto deve ser positiva, que um carrinho pertence a um único usuário,
+ou que uma rota de administração não deve ser acessível por clientes.
 
-LLMs com capacidades avançadas de raciocínio introduzem uma nova via
-para o problema. O padrão ReAct (\textit{Reasoning + Acting})
-\cite{yao2023react} demonstrou que LLMs podem alternar entre raciocínio
-e execução de ações de forma iterativa, comportamento diretamente
-aplicável à exploração autônoma de aplicações web.
+% --- Parte 3: Tese / Solução ----------------------------------
+\textbf{Nossa tese é que LLMs agênticos, equipados com automação de
+navegadores e orientados pelo padrão ReAct, são capazes de navegar
+autonomamente os estados internos de uma SPA e detectar vulnerabilidades
+que requerem raciocínio semântico sobre o domínio da aplicação},
+superando estatisticamente as ferramentas DAST tradicionais nesse
+subconjunto de ameaças. A abordagem proposta --- o \textbf{Agentic DAST}
+--- não busca substituir \textit{scanners} tradicionais para
+vulnerabilidades técnicas (SQLi, XSS por injeção direta), mas
+complementá-los na detecção das vulnerabilidades semanticamente
+complexas que escapam à automação sintática.
 
-Este trabalho propõe o \textbf{Agentic DAST}, um \textit{framework} que
-integra raciocínio semântico de LLMs com automação de navegadores via
-Puppeteer e padrão Screenplay, com o objetivo de superar
-estatisticamente as ferramentas DAST tradicionais na detecção de BLVs
-em SPAs. A questão central de pesquisa é:
+% --- Parte 4: Contribuições -----------------------------------
+As contribuições deste trabalho são:
 
-\begin{quote}
-\small\textit{Em que medida um framework de DAST baseado em agente
-autônomo LLM, orquestrando um navegador headless via padrão Screenplay,
-supera ferramentas tradicionais de DAST na detecção de vulnerabilidades
-de lógica de negócio em SPAs?}
-\end{quote}
+\begin{enumerate}\setlength{\itemsep}{2pt}
+  \item \textbf{\textit{Framework} Agentic DAST} — arquitetura de quatro
+  módulos (Percepção, Cognitivo, Executor, Auditoria) implementada em
+  TypeScript, disponibilizada como \textit{software} de código aberto;
+
+  \item \textbf{Biblioteca de \textit{Abuse Cases}} — oito casos de abuso
+  predefinidos cobrindo as categorias BLV, \textit{Broken Access Control},
+  XSS, JWT, \textit{Sensitive Data Exposure} e SQL Injection, modelados
+  com o padrão Screenplay;
+
+  \item \textbf{Protocolo de avaliação empírica} — experimento controlado
+  comparativo com \textit{ground truth} derivado do catálogo oficial
+  OWASP Juice Shop, usando as métricas \textit{Recall}, \textit{Precision}
+  e F1-\textit{Score} por categoria de vulnerabilidade.
+\end{enumerate}
+
+O restante deste artigo está organizado da seguinte forma: a
+Seção~\ref{sec:relacionados} discute os trabalhos relacionados;
+a Seção~\ref{sec:framework} descreve a arquitetura do Agentic DAST;
+a Seção~\ref{sec:avaliacao} apresenta o protocolo experimental;
+a Seção~\ref{sec:conclusao} conclui o trabalho.
 
 % =============================================================
 \section{Trabalhos Relacionados}
+\label{sec:relacionados}
 % =============================================================
 
-\subsection{DAST em SPAs}
+% --- DAST em SPAs -------------------------------------------
+\subsection{DAST Tradicional e Limitações em SPAs}
 
-A literatura científica sobre DAST para SPAs é escassa e
-concentra-se predominantemente na caracterização das limitações de
-ferramentas existentes \cite{brightsec2024, stackhawk2024}, sem propor
-artefatos que as superem de forma empiricamente mensurável. O
-\textit{Chrome DevTools Protocol} (CDP) provê uma interface de baixo
-nível com o motor Chromium via WebSockets, permitindo intercepção de
-rede em tempo real com granularidade inacessível ao Selenium WebDriver
-\cite{lightpanda2024} --- tornando o Puppeteer o instrumento ideal para
-testes de segurança ofensiva.
+O OWASP ZAP \cite{owaspzap} é a ferramenta DAST de referência no meio
+acadêmico e na indústria. Sua arquitetura de \textit{spider} foi
+projetada para o paradigma das \textit{Multi-Page Applications} (MPAs),
+onde cada interação HTTP resulta em uma nova página HTML analisável
+estaticamente. \citeonline{brightsec2024} demonstraram empiricamente que
+o ZAP identifica menos de 20\% dos \textit{endpoints} de uma SPA Angular
+em comparação com uma suíte de testes E2E que navega os estados
+JavaScript. \citeonline{stackhawk2024} propõem integrar o ZAP a scripts
+Playwright pré-gravados como \textit{baseline} --- abordagem que
+instrumenta o \textit{crawler} com conhecimento humano prévio, mas não
+oferece descoberta autônoma.
 
-\subsection{LLMs Agênticos e Padrão ReAct}
+\citeonline{mdpiBLV2025} realizaram uma revisão sistemática sobre
+ferramentas de detecção de BLVs, concluindo que nenhuma ferramenta
+automatizada disponível detecta BLVs de forma confiável sem intervenção
+humana na especificação das regras de negócio.
 
-\citeonline{yao2023react} introduziram o padrão ReAct, no qual o LLM
-intercala passos de raciocínio (\textit{thought}), ações executáveis
-(\textit{action}) e observações do ambiente (\textit{observation}),
-produzindo trajetórias de decisão interpretáveis.
-\citeonline{wei2022chain} demonstraram que \textit{Chain-of-Thought
-prompting} habilita LLMs a resolver problemas de múltiplas etapas.
-Esses paradigmas formam a base algorítmica do Módulo Cognitivo do
-Agentic DAST.
+% --- LLMs em Segurança --------------------------------------
+\subsection{LLMs Aplicados à Segurança Ofensiva}
 
-\subsection{Fuzzing Semântico}
+\citeonline{yang2025hybrid} demonstraram que LLMs com
+\textit{constraint solving} geram \textit{payloads} que cobrem caminhos
+de execução profundos inacessíveis a \textit{fuzzers} por mutação
+aleatória em protocolos de comunicação. \citeonline{lsast2024}
+propuseram o LSAST, um sistema de análise estática de segurança guiado
+por LLM com capacidade de identificar vulnerabilidades lógicas em código
+PHP. Ambos os trabalhos operam, contudo, sobre código-fonte ou protocolos
+estáticos --- não sobre aplicações web em execução.
 
-\citeonline{yang2025hybrid} demonstraram que LLMs com \textit{constraint
-solving} podem gerar \textit{payloads} que cobrem caminhos de execução
-profundos inacessíveis a \textit{fuzzers} por mutação aleatória.
-O \textit{Semantic Fuzzer} do Agentic DAST aplica esse princípio ao
-contexto de campos de formulário em SPAs.
+\citeonline{pentest2024llm} investigaram o uso de LLMs como assistentes
+de \textit{pentest} manual, demonstrando que modelos como GPT-4 conseguem
+raciocinar sobre vulnerabilidades quando fornecidos com informações
+estruturadas da aplicação alvo. O Agentic DAST avança esse trabalho ao
+eliminar a intermediação humana: o LLM recebe o estado da aplicação em
+tempo real e executa as ações diretamente.
+
+% --- ReAct e Agentes Autônomos ------------------------------
+\subsection{Padrão ReAct e Agentes de Software}
+
+\citeonline{yao2023react} introduziram o padrão ReAct
+(\textit{Reasoning + Acting}), no qual o LLM intercala passos de
+raciocínio (\textit{thought}), ações (\textit{action}) e observações
+do ambiente (\textit{observation}), produzindo trajetórias de decisão
+interpretáveis e auditáveis. \citeonline{wei2022chain} demonstraram que
+\textit{Chain-of-Thought prompting} habilita LLMs a decompor problemas
+complexos em sub-etapas, elevando significativamente a acurácia em
+tarefas de raciocínio de múltiplas etapas.
+
+% --- Padrão Screenplay --------------------------------------
+\subsection{Padrão Screenplay em Automação de Testes}
+
+O \textit{Screenplay Pattern} \cite{serenityscreenplay}, evolução do
+\textit{Page Object Model} (POM), modela testes em termos de Atores,
+Habilidades, Tarefas e Interações atômicas --- desacoplando a intenção
+(\textit{Task}) da implementação (\textit{Interaction}). Isso permite
+que o agente LLM raciocine em termos semânticos (``Tentar login com
+injeção SQL'') sem conhecer os seletores CSS específicos, que são
+resolvidos em tempo de execução pelo Executor.
+
+% --- Tabela Comparativa -------------------------------------
+\subsection{Comparação com Trabalhos Próximos}
+
+A Tabela~\ref{tab:relacionados} compara o Agentic DAST com os trabalhos
+mais próximos em termos de objetivo, abordagem e cobertura.
+
+\begin{table*}[!htb]
+\centering
+\caption{Comparação com trabalhos relacionados. ``Auto.''~=~detecção
+autônoma (sem scripts pré-gravados); ``Sem.''~=~raciocínio semântico;
+``SPA''~=~suporte a SPAs com JavaScript.\label{tab:relacionados}}
+\small
+\begin{tabularx}{\textwidth}{lXcccc}
+\toprule
+\textbf{Trabalho} & \textbf{Abordagem} & \textbf{Auto.} & \textbf{Sem.} & \textbf{SPA} & \textbf{BLV} \\
+\midrule
+OWASP ZAP \cite{owaspzap}
+  & \textit{Spider} + scan ativo & Sim & Não & Não & Não \\
+ZAP + E2E \cite{stackhawk2024}
+  & ZAP guiado por script humano & Não & Não & Sim & Não \\
+LSAST \cite{lsast2024}
+  & Análise estática com LLM & Sim & Sim & Não & Parcial \\
+LLM Pentest \cite{pentest2024llm}
+  & LLM assistindo humano & Não & Sim & Sim & Sim \\
+Yang et al. \cite{yang2025hybrid}
+  & Fuzzing + LLM (protocolos) & Sim & Sim & Não & Não \\
+\midrule
+\textbf{Agentic DAST (este trabalho)}
+  & Agente LLM autônomo + SPA & \textbf{Sim} & \textbf{Sim} & \textbf{Sim} & \textbf{Sim} \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+A tabela evidencia que nenhum trabalho anterior combina simultaneamente
+autonomia total, raciocínio semântico, suporte a SPAs com JavaScript e
+detecção de BLVs. O Agentic DAST é, ao nosso conhecimento, o primeiro
+\textit{framework} a abordar todas essas dimensões de forma integrada.
 
 % =============================================================
 \section{Framework Proposto}
+\label{sec:framework}
 % =============================================================
 
 \subsection{Visão Geral da Arquitetura}
 
 O Agentic DAST é estruturado em quatro módulos com responsabilidades
-bem definidas, conforme ilustrado na Figura~\ref{fig:arquitetura}.
+bem definidas, que operam em sequência conforme a
+Figura~\ref{fig:arquitetura}. O fluxo de execução ocorre em quatro
+fases: (1)~\textit{Percepção}: o DOMExtractor navega a SPA e constrói
+o \textit{AppMap}; (2)~\textit{Inicialização}: o ActionDispatcher
+instancia o Actor com as \textit{Abilities}; (3)~\textit{Loop ReAct}:
+o ReActAgent intercala Thought/Action/Observation com o LLM;
+(4)~\textit{Relatório}: os \textit{Findings} são persistidos em JSON.
 
-\begin{figure}[htb]
+\begin{figure}[!htb]
 \centering
 \small
 \begin{verbatim}
- DOMExtractor        ReActAgent
- (Percepção)   -->   (Cognitivo)
-      |                   |
-      v                   v
-   AppMap         ActionDispatcher
-                   (Executor)
-                       |
-                   BrowseTheWeb
-                   HttpClient
-                   OWASP ZAP
-                   (Auditoria)
+  ┌─────────────────────────────────────┐
+  │          FASE 1: PERCEPÇÃO          │
+  │  DOMExtractor (Puppeteer + CDP)     │
+  │  → AppMap {rotas, endpoints, JWT}   │
+  └──────────────┬──────────────────────┘
+                 │ AppMap
+  ┌──────────────▼──────────────────────┐
+  │       FASE 3: LOOP REACT            │
+  │  ReActAgent (Claude API)            │
+  │  Thought → Action → Observation     │
+  │  ↕ ActionDispatcher                 │
+  │  ↕ BrowseTheWeb (Puppeteer)         │
+  │  ↕ HttpClient (Axios)               │
+  │  ↕ OWASP ZAP (proxy passivo)        │
+  └──────────────┬──────────────────────┘
+                 │ Findings
+  ┌──────────────▼──────────────────────┐
+  │       FASE 4: RELATÓRIO             │
+  │  report-<timestamp>.json            │
+  └─────────────────────────────────────┘
 \end{verbatim}
-\caption{Arquitetura de quatro módulos do Agentic DAST.}
+\caption{Arquitetura do Agentic DAST. O loop ReAct opera sobre o
+AppMap gerado na fase de Percepção; o ZAP audita passivamente todo
+o tráfego gerado pelo Puppeteer.}
 \label{fig:arquitetura}
 \end{figure}
 
-O fluxo de execução ocorre em quatro fases sequenciais: (1)
-\textit{Percepção}: o DOMExtractor navega pela SPA e constrói o
-\textit{AppMap}; (2) \textit{Executor}: o \textit{ActionDispatcher}
-inicializa o Actor; (3) \textit{Cognição}: o \textit{ReActAgent} executa
-o \textit{loop} ReAct com o LLM; (4) \textit{Relatório}: os
-\textit{Findings} são salvos em JSON.
-
 \subsection{Módulo de Percepção}
 
-Implementado com Puppeteer, o \textit{DOMExtractor} navega pelas rotas
-Angular do OWASP Juice Shop e constrói o \textit{AppMap} — objeto
-estruturado que resume: rotas visitadas com formulários e seletores CSS,
-chamadas HTTP interceptadas via CDP, tokens JWT coletados por login
-automatizado e metadados da aplicação. O tráfego é roteado pelo proxy
-OWASP ZAP para auditoria passiva simultânea.
+O \texttt{DOMExtractor} é implementado com Puppeteer, que controla o
+Chromium via \textit{Chrome DevTools Protocol} (CDP). A escolha do CDP
+sobre o Selenium WebDriver é justificada pela necessidade de
+intercepção de rede de baixo nível: o CDP permite pausar, inspecionar
+e modificar requisições HTTP antes de chegarem ao renderizador, acesso
+impossível com o Selenium \cite{lightpanda2024}.
+
+O módulo realiza: (i)~navegação por todas as rotas Angular registradas
+no \textit{router}; (ii)~extração de formulários, botões e
+metadados ARIA de cada estado; (iii)~interceptação de chamadas
+\texttt{/api/} e \texttt{/rest/} via CDP; (iv)~login automatizado
+e extração do JWT do \texttt{localStorage}. O resultado é o
+\textbf{AppMap} --- um objeto JSON estruturado que é a entrada para
+o Módulo Cognitivo.
 
 \subsection{Módulo Cognitivo}
 
-O \textit{ReActAgent} implementa o \textit{loop} ReAct sobre a API
-Claude (Anthropic). O SYSTEM\_PROMPT define ao LLM: seu papel como
-pesquisador de segurança, as sete categorias de BLVs a investigar e as
-oito ações disponíveis. O \textit{Prompt Caching} da Anthropic
-armazena o SYSTEM\_PROMPT em cache entre iterações, reduzindo custo em
-até 90\%. O histórico de conversa cresce a cada iteração: AppMap
-inicial, seguido de ciclos (\textit{thought} + \textit{action}) /
-\textit{observation}.
+O \texttt{ReActAgent} implementa o \textit{loop} ReAct sobre a API da
+Anthropic (modelo Claude). O \texttt{SYSTEM\_PROMPT}, marcado com
+\textit{Prompt Caching} da Anthropic, instrui o LLM sobre: (i)~seu
+papel como pesquisador de segurança autorizado; (ii)~as seis categorias
+de vulnerabilidades a investigar; (iii)~as oito ações disponíveis e
+seus formatos JSON. O caching reduz o custo de \textit{tokens} em até
+90\% nas iterações subsequentes \cite{anthropicpromptcaching}.
+
+O histórico de conversa cresce iterativamente: AppMap inicial,
+seguido de ciclos (\textit{thought} + \textit{action}) /
+\textit{observation}. O LLM decide autonomamente qual ação executar
+em cada etapa com base nas observações acumuladas.
 
 \subsection{Módulo Executor}
 
-Implementado com o \textit{Screenplay Pattern}
-\cite{serenityscreenplay}, compõe-se de três camadas: \textit{Actor}
-(agente de segurança com habilidades), \textit{Abilities}
-(\texttt{BrowseTheWeb} via Puppeteer e \texttt{HttpClient} via Axios)
-e \textit{ActionDispatcher} (mapeia \texttt{ParsedAction} → Ability
-correta). As ações disponíveis ao LLM são: \texttt{navigate},
+O Executor é implementado com o \textit{Screenplay Pattern}
+\cite{serenityscreenplay} em três camadas:
+
+\begin{itemize}\setlength{\itemsep}{2pt}
+  \item \textbf{Actor} --- o agente de segurança, que agrega as
+  habilidades via interface fluente
+  (\texttt{Actor.named().withBrowser().withHttpClient()});
+
+  \item \textbf{Abilities} --- \texttt{BrowseTheWeb} (Puppeteer +
+  CDP) e \texttt{HttpClient} (Axios com \texttt{validateStatus:
+  () => true}, que nunca lança exceção em 4xx/5xx);
+
+  \item \textbf{ActionDispatcher} --- mapeia cada
+  \texttt{ParsedAction} (tipo discriminado TypeScript) para a
+  \textit{Ability} correspondente, com propagação automática do JWT
+  extraído para o \texttt{HttpClient}.
+\end{itemize}
+
+As oito ações disponíveis ao LLM são: \texttt{navigate},
 \texttt{fill\_field}, \texttt{click\_element}, \texttt{read\_page},
 \texttt{make\_request}, \texttt{extract\_tokens},
-\texttt{report\_finding} e \texttt{finish}. O JWT extraído é
-propagado automaticamente para o \texttt{HttpClient}.
+\texttt{report\_finding} e \texttt{finish}.
+
+Complementando o \textit{loop} ReAct, a \textbf{Biblioteca de Abuse
+Cases} executa oito testes estruturados após o \textit{loop},
+garantindo cobertura mínima das vulnerabilidades conhecidas do Juice
+Shop. A Tabela~\ref{tab:abusecases} lista os \textit{Abuse Cases}
+implementados.
+
+\begin{table}[!htb]
+\centering
+\caption{Biblioteca de \textit{Abuse Cases} implementados, com
+categorias OWASP e severidade esperada.\label{tab:abusecases}}
+\small
+\begin{tabularx}{\columnwidth}{lXl}
+\toprule
+\textbf{\textit{Abuse Case}} & \textbf{Categoria} & \textbf{Sev.} \\
+\midrule
+NegativeQty     & BLV — Lógica de Negócio          & HIGH     \\
+ZeroStarReview  & BLV — Validação de Entrada        & MEDIUM   \\
+IDOR            & Broken Access Control (A01)       & HIGH     \\
+AdminRoute      & Broken Access Control (A01)       & CRITICAL \\
+XSS             & Injection — XSS (A03)             & HIGH     \\
+JWT             & Falhas Criptográficas (A02)       & CRITICAL \\
+SensitiveData   & Misconfiguration (A05)            & HIGH     \\
+SQLInjection    & Injection — SQLi (A03)            & CRITICAL \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 \subsection{Módulo de Auditoria}
 
-O OWASP ZAP opera em modo \textit{daemon} como proxy reverso.
-Durante a fase de Percepção, todo o tráfego do browser é roteado pelo
-ZAP, que registra passivamente a superfície de ataque. Após o
-\textit{loop} ReAct, o ZAP executa varredura ativa guiada pelos
-\textit{endpoints} descobertos semanticamente, enriquecendo os
-\textit{findings} com detecções de vulnerabilidades técnicas
-complementares.
+O OWASP ZAP opera em modo \textit{daemon} (via Docker) como proxy
+reverso na porta 8888. Todo o tráfego gerado pelo Puppeteer durante a
+fase de Percepção é roteado pelo ZAP, que registra passivamente a
+superfície de ataque. Após o \textit{loop} ReAct, o
+\texttt{ZapClient} consulta a API REST do ZAP para recuperar os
+alertas acumulados, filtrando aqueles com confiança zero (falsos
+positivos prováveis). Os alertas são convertidos para o formato
+\texttt{Finding} do \textit{framework} e consolidados no relatório
+final junto com os \textit{Findings} do agente e dos \textit{Abuse Cases}.
 
 % =============================================================
-\section{Metodologia}
+\section{Avaliação}
+\label{sec:avaliacao}
 % =============================================================
 
-A pesquisa adota \textbf{Design Science Research} (DSR)
-\cite{hevner2004design}, combinando o desenvolvimento de um artefato
-tecnológico com geração de conhecimento científico rigoroso sobre sua
-eficácia. O projeto está dividido em sete fases ao longo de 36 semanas
-(TCC~I: Fases 1--3; TCC~II: Fases 4--7).
+Esta seção descreve o protocolo experimental adotado para validar o
+Agentic DAST. Os resultados quantitativos serão apresentados na versão
+final deste artigo (TCC~II), após a execução dos experimentos previstos
+para o segundo semestre de 2026.
 
-\subsection{Protocolo Experimental}
+\subsection{Objetivos e Perguntas de Pesquisa}
 
-O experimento comparativo (Fase~6) avalia três cenários sobre o OWASP
-Juice Shop \cite{owaspjuiceshop}, com três rodadas cada ($n = 3$):
-
-\begin{itemize}\setlength{\itemsep}{2pt}
-  \item \textbf{Cenário A} — OWASP ZAP com \textit{spider} padrão
-  (\textit{baseline} tradicional);
-  \item \textbf{Cenário B} — OWASP ZAP guiado por suíte E2E
-  pré-gravada (\textit{baseline} E2E);
-  \item \textbf{Cenário C} — Agentic DAST em modo \textit{black-box}
-  autônomo (experimental).
-\end{itemize}
-
-O banco de dados do Juice Shop é reinicializado entre rodadas para
-garantir estado inicial idêntico. A análise estatística utiliza o teste
-de Wilcoxon para amostras emparelhadas ($\alpha = 0{,}05$).
-
-\subsection{Hipóteses Testáveis}
+O experimento é estruturado em torno de três Perguntas de Pesquisa (RQs):
 
 \begin{description}\setlength{\itemsep}{2pt}
-  \item[\textbf{H1}] $\text{Recall}(C) > \text{Recall}(A)$
-  com significância estatística ($p < 0{,}05$).
-  \item[\textbf{H2}] $\text{Endpoints}(C) > \text{Endpoints}(A)$
-  e $\text{Endpoints}(C) > \text{Endpoints}(B)$.
-  \item[\textbf{H3}] A taxa de detecção do \textit{Semantic Fuzzer}
-  é superior à do \textit{fuzzing} aleatório sobre os mesmos campos.
+  \item[\textbf{RQ1}] \textit{O Agentic DAST detecta mais
+  vulnerabilidades que o OWASP ZAP com \textit{spider} tradicional?}
+  Esta RQ avalia o Recall geral e por categoria de vulnerabilidade.
+
+  \item[\textbf{RQ2}] \textit{O agente LLM descobre mais
+  \textit{endpoints} e estados de UI que scanners tradicionais?}
+  Esta RQ avalia a capacidade de navegação semântica do framework.
+
+  \item[\textbf{RQ3}] \textit{Os \textit{Abuse Cases} predefinidos
+  alcançam maior taxa de confirmação de vulnerabilidades que abordagens
+  de \textit{fuzzing} aleatório sobre os mesmos campos?}
+  Esta RQ avalia a qualidade semântica dos testes estruturados.
 \end{description}
 
-\subsection{Métricas de Avaliação}
+\subsection{\textit{Setup} Experimental}
 
-\begin{table}[htb]
+O ambiente de testes é composto por três contêineres Docker
+orquestrados via Docker Compose:
+
+\begin{itemize}\setlength{\itemsep}{2pt}
+  \item \textbf{Juice Shop} (\texttt{bkimminich/juice-shop:latest}) ---
+  a SPA Angular alvo, exposta na porta 3000;
+  \item \textbf{OWASP ZAP} (\texttt{ghcr.io/zaproxy/zaproxy:stable})
+  --- \textit{daemon} na porta 8080 (API) e 8888 (proxy);
+  \item \textbf{Agente} --- processo Node.js 20 com TypeScript,
+  consumindo a API Claude (\texttt{claude-sonnet-4-6}).
+\end{itemize}
+
+Cada cenário é executado $n = 3$ rodadas independentes; o banco de
+dados do Juice Shop é reinicializado entre rodadas para garantir estado
+inicial idêntico. A temperatura do LLM é fixada em $T = 0{,}3$ para
+reduzir a variância entre rodadas.
+
+Os três cenários comparativos são:
+
+\begin{itemize}\setlength{\itemsep}{2pt}
+  \item \textbf{Cenário~A} --- OWASP ZAP com \textit{spider} padrão,
+  sem qualquer instrumentação adicional (\textit{baseline} tradicional);
+  \item \textbf{Cenário~B} --- OWASP ZAP guiado por suíte de testes E2E
+  do ``caminho feliz'' pré-gravada (\textit{baseline} com navegação
+  humana);
+  \item \textbf{Cenário~C} --- Agentic DAST em modo \textit{black-box}
+  autônomo, sem conhecimento prévio da estrutura da aplicação
+  (cenário experimental).
+\end{itemize}
+
+\subsection{\textit{Ground Truth} e Métricas}
+
+A Matriz de \textit{Ground Truth} (GT) é construída a partir do catálogo
+oficial de desafios do OWASP Juice Shop \cite{owaspjuiceshop},
+selecionando os challenges das categorias investigadas (BLV, Broken
+Access Control, XSS, JWT, Sensitive Data, Injection). Cada challenge
+é classificado manualmente antes da execução dos experimentos, garantindo
+gabarito independente dos resultados.
+
+As métricas coletadas para cada cenário são:
+
+\begin{table}[!htb]
 \centering
-\caption{Métricas do experimento comparativo.\label{tab:metricas}}
+\caption{Métricas do experimento. VP~=~Verdadeiro Positivo,
+FP~=~Falso Positivo, FN~=~Falso Negativo.\label{tab:metricas}}
 \small
 \begin{tabularx}{\columnwidth}{lX}
 \toprule
 \textbf{Métrica} & \textbf{Definição} \\
 \midrule
-\textit{Recall} &
-  $\text{VP} / (\text{VP} + \text{FN})$ \\
-\textit{Precision} &
-  $\text{VP} / (\text{VP} + \text{FP})$ \\
-F1-\textit{Score} &
-  $2 \cdot \frac{\text{Prec} \cdot \text{Rec}}{\text{Prec} + \text{Rec}}$ \\
-Cobertura &
-  N.º de endpoints e estados de UI descobertos \\
+\textit{Recall}    & $\text{VP} / (\text{VP} + \text{FN})$ \\
+\textit{Precision} & $\text{VP} / (\text{VP} + \text{FP})$ \\
+F1-\textit{Score}  & $2 \cdot (\text{Prec} \cdot \text{Rec}) /
+                     (\text{Prec} + \text{Rec})$ \\
+Cobertura          & N.º de \textit{endpoints} e estados UI descobertos \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-A Matriz de \textit{Ground Truth} será construída a partir do catálogo
-oficial de vulnerabilidades do OWASP Juice Shop, garantindo gabarito
-confiável e reduzindo viés de seleção.
+\subsection{Hipóteses Testáveis}
+
+\begin{description}\setlength{\itemsep}{2pt}
+  \item[\textbf{H1}] $\text{Recall}(C) > \text{Recall}(A)$ com
+  significância estatística (teste de Wilcoxon, $p < 0{,}05$).
+  \item[\textbf{H2}] $\text{Endpoints}(C) > \text{Endpoints}(A)$ e
+  $\text{Endpoints}(C) > \text{Endpoints}(B)$.
+  \item[\textbf{H3}] A taxa de confirmação dos \textit{Abuse Cases}
+  é superior à do \textit{fuzzing} aleatório sobre os mesmos campos.
+\end{description}
+
+A análise estatística utiliza o teste de Wilcoxon para amostras
+emparelhadas com $\alpha = 0{,}05$, adequado ao tamanho de amostra
+reduzido ($n = 3$) sem pressuposição de normalidade
+\cite{kitchenham2002}.
 
 \subsection{Ameaças à Validade}
 
-\textbf{Interna:} variações entre rodadas causadas pela natureza
-probabilística dos LLMs serão controladas com temperatura fixa
-($T = 0{,}3$) e mesma versão de modelo.
-\textbf{Externa:} os resultados são válidos para o Juice Shop; a
-generalização para sistemas reais será avaliada em ambiente de
-\textit{staging} corporativo.
-\textbf{Construção:} a Matriz GT é derivada do catálogo oficial OWASP,
-eliminando subjetividade na definição de BLVs.
-
-% =============================================================
-\section{Resultados Esperados}
-% =============================================================
-
-Ao término do trabalho, espera-se:
-
-\begin{enumerate}\setlength{\itemsep}{2pt}
-  \item \textbf{\textit{Framework} de código aberto} (Agentic DAST),
-  disponibilizado em repositório Git público.
-
-  \item \textbf{Evidência empírica} de superioridade do Agentic DAST
-  em \textit{Recall} e F1-\textit{Score} para BLVs, validada por
-  experimento controlado.
-
-  \item \textbf{Biblioteca de \textit{Abuse Cases}} reutilizável para
-  SPAs, modelada com Screenplay Pattern, cobrindo no mínimo oito
-  categorias de BLVs.
-
-  \item \textbf{\textit{Semantic Fuzzer}} demonstravelmente superior ao
-  \textit{fuzzing} aleatório em cobertura de caminhos lógicos.
-
-  \item \textbf{Artigo científico} submetido a conferência nacional
-  (SBES, SBSEG ou WebMedia).
-\end{enumerate}
+\textbf{Validade interna:} a natureza probabilística dos LLMs pode
+causar variação entre rodadas. Controlamos com temperatura fixa
+($T = 0{,}3$), mesma versão do modelo e reinicialização do banco de
+dados. \textbf{Validade externa:} os resultados são obtidos sobre o
+Juice Shop, uma aplicação sintética; a generalização para sistemas reais
+de produção requer estudos adicionais em ambientes de \textit{staging}.
+\textbf{Validade de construção:} a Matriz GT é derivada do catálogo
+oficial OWASP, minimizando subjetividade; vulnerabilidades ambíguas são
+excluídas do conjunto de avaliação.
 
 % =============================================================
 \section{Conclusão}
+\label{sec:conclusao}
 % =============================================================
 
-Este artigo apresentou o Agentic DAST, um \textit{framework} que
-endereça a lacuna crítica entre as capacidades das ferramentas DAST
-tradicionais e as demandas de segurança de SPAs modernas. A integração
-de raciocínio semântico de LLMs com automação de navegadores via padrão
-ReAct e Screenplay representa uma mudança de paradigma: de testes
-baseados em padrões sintáticos para testes guiados por compreensão do
-domínio. A implementação dos módulos de Percepção, Cognitivo e Executor
-está em andamento sobre o OWASP Juice Shop, com os experimentos
-comparativos previstos para o segundo semestre de 2026. Os resultados
-têm potencial de impactar diretamente \textit{pipelines} de DevSecOps
-na indústria brasileira e de contribuir com a literatura científica sobre
-DAST agêntico em SPAs.
+Este artigo apresentou o \textbf{Agentic DAST}, um \textit{framework}
+que endereça a lacuna crítica entre as capacidades das ferramentas DAST
+tradicionais e as demandas de segurança de SPAs modernas. O problema
+é duplo: as SPAs tornam a superfície de ataque inacessível a
+\textit{crawlers} estáticos, e as vulnerabilidades semanticamente
+complexas (BLV, IDOR, JWT) são invisíveis a ferramentas baseadas em
+padrões sintáticos.
+
+Nossa tese --- de que LLMs agênticos com automação de navegadores podem
+preencher essa lacuna --- é materializada em uma arquitetura de quatro
+módulos integrados: Percepção via CDP, raciocínio ReAct sobre a API
+Claude, execução via Screenplay e auditoria passiva via OWASP ZAP.
+A biblioteca de oito \textit{Abuse Cases} predefinidos garante cobertura
+mínima e reprodutível das categorias de vulnerabilidade investigadas.
+
+\textbf{Limitações:} o \textit{framework} atual é validado exclusivamente
+sobre o OWASP Juice Shop; a latência e o custo das chamadas à API do LLM
+tornam o Agentic DAST complementar, e não substituto, ao ZAP em
+\textit{pipelines} de CI/CD de alta frequência. O número reduzido de
+rodadas ($n = 3$) limita o poder estatístico das comparações.
+
+\textbf{Trabalhos futuros:} (i)~ampliar a validação para SPAs de
+produção em ambientes de \textit{staging} corporativo; (ii)~investigar
+modelos LLM locais (Llama, Mistral) como alternativas de menor custo e
+maior privacidade; (iii)~estender o \textit{Screenplay Pattern} com
+suporte a múltiplos atores simultâneos (vítima + atacante) para testes
+de vulnerabilidades de controle de acesso mais sofisticados;
+(iv)~integrar o \textit{framework} como \textit{plugin} nativo do
+OWASP ZAP.
+
+Os resultados empíricos do experimento comparativo (Cenários A, B e C)
+serão reportados na continuação deste trabalho (TCC~II), com potencial
+de impacto direto em \textit{pipelines} de DevSecOps na indústria
+brasileira e na literatura científica sobre DAST agêntico em SPAs.
 
 % =============================================================
 % Referências
