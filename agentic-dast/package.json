@@ -1,0 +1,22 @@
+{
+  "name": "agentic-dast",
+  "version": "1.0.0",
+  "description": "Framework agentico para deteccao de vulnerabilidades de logica de negocio em SPAs",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "build": "tsc",
+    "dev": "ts-node --watch src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "puppeteer": "^22.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  }
+}

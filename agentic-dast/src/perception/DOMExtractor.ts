@@ -1,0 +1,413 @@
+/**
+ * perception/DOMExtractor.ts
+ * ---------------------------------------------------------------
+ * Módulo de Percepção — usa Puppeteer (Chrome DevTools Protocol)
+ * para navegar na SPA e construir o AppMap semântico.
+ *
+ * Responsabilidades:
+ *  1. Abrir o browser e navegar pelas rotas conhecidas do Juice Shop
+ *  2. Interceptar todas as chamadas HTTP (XHR/Fetch) via CDP
+ *  3. Extrair formulários e elementos interativos do DOM
+ *  4. Registrar tokens de autenticação (JWT, cookies)
+ *  5. Retornar um AppMap completo para o módulo Cognitivo
+ * ---------------------------------------------------------------
+ */
+
+import puppeteer, { Browser, Page } from 'puppeteer';
+import { config } from '../config';
+import {
+  AppMap, AppRoute, ApiEndpoint, AppForm,
+  FormField, InteractiveElement, AuthContext,
+} from './types';
+
+// Rotas do Juice Shop que o extrator vai visitar.
+// São as rotas Angular (hash routing: /#/...)
+const JUICE_SHOP_ROUTES = [
+  '/',
+  '/#/login',
+  '/#/register',
+  '/#/basket',
+  '/#/order-history',
+  '/#/administration',
+  '/#/score-board',
+  '/#/contact',
+  '/#/about',
+  '/#/search',
+];
+
+export class DOMExtractor {
+  private browser: Browser | null = null;
+  private interceptedEndpoints: ApiEndpoint[] = [];
+
+  /** Inicializa o browser Puppeteer com ou sem proxy ZAP */
+  async launch(): Promise<void> {
+    const args = ['--no-sandbox', '--disable-setuid-sandbox'];
+
+    if (config.useZapProxy) {
+      // Roteia o tráfego pelo ZAP para auditoria passiva
+      args.push(`--proxy-server=http://${config.zapProxyHost}:${config.zapProxyPort}`);
+      args.push('--ignore-certificate-errors');
+      console.log(`[Percepção] Usando proxy ZAP em ${config.zapProxyHost}:${config.zapProxyPort}`);
+    }
+
+    this.browser = await puppeteer.launch({
+      headless: true,   // true = sem janela, false = útil para depuração
+      args,
+    });
+
+    console.log('[Percepção] Browser iniciado.');
+  }
+
+  /** Fecha o browser ao final */
+  async close(): Promise<void> {
+    await this.browser?.close();
+    console.log('[Percepção] Browser encerrado.');
+  }
+
+  /**
+   * Ponto de entrada principal — navega pelo alvo e retorna o AppMap.
+   */
+  async extract(): Promise<AppMap> {
+    if (!this.browser) throw new Error('Chame launch() antes de extract().');
+
+    const routes: AppRoute[] = [];
+
+    for (const routePath of JUICE_SHOP_ROUTES) {
+      const url = `${config.targetUrl}${routePath}`;
+      console.log(`[Percepção] Visitando: ${url}`);
+
+      const page = await this.browser.newPage();
+
+      // Ativa interceptação de rede nesta página
+      await this.enableNetworkInterception(page);
+
+      try {
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 15_000 });
+        // Aguarda a SPA Angular renderizar o conteúdo dinâmico
+        await this.sleep(1500);
+
+        const route = await this.extractRoute(page, routePath);
+        routes.push(route);
+      } catch (err) {
+        console.warn(`[Percepção] Erro ao visitar ${url}: ${(err as Error).message}`);
+      } finally {
+        await page.close();
+      }
+    }
+
+    // Coleta tokens fazendo login com conta de teste
+    const auth = await this.collectAuthTokens();
+
+    // Coleta endpoints autenticados (repete algumas rotas logado)
+    const authEndpoints = await this.collectAuthenticatedEndpoints(auth);
+
+    const allEndpoints = this.deduplicateEndpoints([
+      ...this.interceptedEndpoints,
+      ...authEndpoints,
+    ]);
+
+    const appMap: AppMap = {
+      baseUrl: config.targetUrl,
+      routes,
+      apiEndpoints: allEndpoints,
+      auth,
+      metadata: {
+        framework: 'Angular',
+        title: 'OWASP Juice Shop',
+        capturedAt: new Date(),
+        totalForms: routes.reduce((sum, r) => sum + r.forms.length, 0),
+        totalEndpoints: allEndpoints.length,
+      },
+    };
+
+    console.log(
+      `[Percepção] AppMap gerado: ${routes.length} rotas, ` +
+      `${allEndpoints.length} endpoints, ` +
+      `${appMap.metadata.totalForms} formulários.`
+    );
+
+    return appMap;
+  }
+
+  // ===========================================================
+  // Métodos privados
+  // ===========================================================
+
+  /** Intercepta chamadas XHR/Fetch e registra como ApiEndpoint */
+  private async enableNetworkInterception(page: Page): Promise<void> {
+    // Escuta respostas de rede
+    page.on('response', async (response) => {
+      const url = response.url();
+      const method = response.request().method();
+
+      // Filtra apenas chamadas à API do Juice Shop (ignora estáticos)
+      if (!url.includes('/api/') && !url.includes('/rest/')) return;
+      if (method === 'OPTIONS') return;
+
+      let requestBody: unknown;
+      let responseBody: unknown;
+
+      try {
+        const postData = response.request().postData();
+        if (postData) requestBody = JSON.parse(postData);
+      } catch {
+        // postData pode não ser JSON válido
+      }
+
+      try {
+        if (response.headers()['content-type']?.includes('application/json')) {
+          responseBody = await response.json().catch(() => null);
+        }
+      } catch {
+        // resposta pode ter sido consumida
+      }
+
+      this.interceptedEndpoints.push({
+        method,
+        url,
+        requestBody,
+        responseBody,
+        responseStatus: response.status(),
+        contentType: response.headers()['content-type'],
+        authRequired: response.status() === 401 || response.status() === 403,
+      });
+    });
+  }
+
+  /** Extrai formulários e elementos interativos de uma página */
+  private async extractRoute(page: Page, routePath: string): Promise<AppRoute> {
+    const title = await page.title();
+
+    // Extrai todos os formulários do DOM via page.evaluate()
+    // (código executado dentro do browser, não no Node.js)
+    const forms = await page.evaluate((): AppForm[] => {
+      const result: AppForm[] = [];
+      const formElements = document.querySelectorAll('form, mat-card');
+
+      formElements.forEach((formEl, formIdx) => {
+        const fields: FormField[] = [];
+        const inputs = formEl.querySelectorAll(
+          'input, textarea, select, mat-select'
+        );
+
+        inputs.forEach((input, inputIdx) => {
+          const el = input as HTMLInputElement;
+          // Gera um seletor CSS único baseado na posição
+          const selector =
+            el.id ? `#${el.id}` :
+            el.name ? `[name="${el.name}"]` :
+            `form:nth-child(${formIdx + 1}) input:nth-child(${inputIdx + 1})`;
+
+          fields.push({
+            name: el.name || el.id || `field_${inputIdx}`,
+            type: el.type || 'text',
+            placeholder: el.placeholder,
+            required: el.required,
+            selector,
+          });
+        });
+
+        if (fields.length > 0) {
+          const submitBtn = formEl.querySelector(
+            'button[type="submit"], button.mat-raised-button'
+          ) as HTMLElement | null;
+
+          result.push({
+            id: `form_${formIdx}`,
+            pageUrl: window.location.href,
+            action: (formEl as HTMLFormElement).action || undefined,
+            method: (formEl as HTMLFormElement).method || 'POST',
+            fields,
+            submitSelector: submitBtn?.id
+              ? `#${submitBtn.id}`
+              : 'button[type="submit"]',
+          });
+        }
+      });
+
+      return result;
+    });
+
+    // Extrai botões e links interativos
+    const interactiveElements = await page.evaluate((): InteractiveElement[] => {
+      const result: InteractiveElement[] = [];
+      const buttons = document.querySelectorAll('button, a[href], mat-menu-item');
+
+      buttons.forEach((el, idx) => {
+        const text = (el.textContent || '').trim();
+        if (!text || text.length > 80) return;
+
+        const href = (el as HTMLAnchorElement).href;
+        const selector = el.id ? `#${el.id}` : `button:nth-of-type(${idx + 1})`;
+
+        result.push({
+          type: el.tagName === 'A' ? 'link' : 'button',
+          text,
+          selector,
+          href: href || undefined,
+        });
+      });
+
+      return result;
+    });
+
+    // Verifica se a rota exige autenticação
+    const requiresAuth = await page.evaluate(() => {
+      return (
+        document.body.innerText.includes('Please login') ||
+        document.title.includes('Login') ||
+        document.querySelector('app-login') !== null
+      );
+    });
+
+    return {
+      path: routePath,
+      title,
+      requiresAuth,
+      forms,
+      interactiveElements,
+    };
+  }
+
+  /**
+   * Faz login com a conta padrão de teste e retorna os tokens.
+   * Juice Shop sempre tem o usuário: customer@juice-sh.op / customer
+   * (criado automaticamente)
+   */
+  private async collectAuthTokens(): Promise<AuthContext> {
+    const page = await this.browser!.newPage();
+    await this.enableNetworkInterception(page);
+
+    let jwt: string | undefined;
+
+    // Escuta respostas de login para capturar o JWT
+    page.on('response', async (response) => {
+      if (response.url().includes('/rest/user/login') && response.status() === 200) {
+        try {
+          const body = await response.json();
+          jwt = body?.authentication?.token;
+        } catch {
+          // ignora
+        }
+      }
+    });
+
+    try {
+      await page.goto(`${config.targetUrl}/#/login`, {
+        waitUntil: 'networkidle2',
+        timeout: 15_000,
+      });
+      await this.sleep(1000);
+
+      // Preenche e-mail
+      await page.type('#email', 'customer@juice-sh.op');
+      await this.sleep(300);
+
+      // Preenche senha
+      await page.type('#password', 'customer');
+      await this.sleep(300);
+
+      // Clica em "Log in"
+      await page.click('#loginButton');
+      await this.sleep(2000);
+
+      // Lê JWT do localStorage (Juice Shop guarda lá)
+      if (!jwt) {
+        jwt = await page.evaluate(() => {
+          return localStorage.getItem('token') ?? undefined;
+        });
+      }
+
+      // Coleta cookies da sessão
+      const puppeteerCookies = await page.cookies();
+      const cookies: Record<string, string> = {};
+      for (const c of puppeteerCookies) {
+        cookies[c.name] = c.value;
+      }
+
+      console.log(`[Percepção] Auth coletado. JWT: ${jwt ? 'sim' : 'não encontrado'}`);
+
+      return {
+        jwt,
+        bearerToken: jwt ? `Bearer ${jwt}` : undefined,
+        cookies,
+        userEmail: 'customer@juice-sh.op',
+      };
+    } finally {
+      await page.close();
+    }
+  }
+
+  /**
+   * Navega por rotas autenticadas para capturar endpoints que
+   * exigem login (ex: /api/Baskets, /rest/user/whoami)
+   */
+  private async collectAuthenticatedEndpoints(auth: AuthContext): Promise<ApiEndpoint[]> {
+    if (!auth.jwt) return [];
+
+    const page = await this.browser!.newPage();
+    const authEndpoints: ApiEndpoint[] = [];
+
+    // Injeta o JWT em todas as requisições
+    await page.setExtraHTTPHeaders({
+      Authorization: `Bearer ${auth.jwt}`,
+    });
+
+    page.on('response', async (response) => {
+      const url = response.url();
+      if (!url.includes('/api/') && !url.includes('/rest/')) return;
+
+      let responseBody: unknown;
+      try {
+        responseBody = await response.json().catch(() => null);
+      } catch {
+        // ignora
+      }
+
+      authEndpoints.push({
+        method: response.request().method(),
+        url,
+        responseStatus: response.status(),
+        responseBody,
+        contentType: response.headers()['content-type'],
+        authRequired: false,
+      });
+    });
+
+    const authenticatedRoutes = [
+      '/#/basket',
+      '/#/order-history',
+      '/#/administration',
+      '/#/privacy-security/privacy-policy',
+    ];
+
+    try {
+      for (const route of authenticatedRoutes) {
+        await page.goto(`${config.targetUrl}${route}`, {
+          waitUntil: 'networkidle2',
+          timeout: 10_000,
+        });
+        await this.sleep(1000);
+      }
+    } finally {
+      await page.close();
+    }
+
+    return authEndpoints;
+  }
+
+  /** Remove endpoints duplicados (mesma URL + método) */
+  private deduplicateEndpoints(endpoints: ApiEndpoint[]): ApiEndpoint[] {
+    const seen = new Set<string>();
+    return endpoints.filter((ep) => {
+      const key = `${ep.method}:${ep.url}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}

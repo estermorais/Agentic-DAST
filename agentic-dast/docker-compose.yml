@@ -1,0 +1,49 @@
+# =============================================================
+# Agentic DAST — Ambiente Docker
+# Três containers:
+#   1. juice-shop  → alvo da análise (Angular SPA)
+#   2. zap         → proxy/scanner OWASP ZAP
+#   3. agent       → o agente em Node.js (opcional — pode rodar local)
+# =============================================================
+version: '3.8'
+
+services:
+
+  # -------------------------------------------------------
+  # Alvo: OWASP Juice Shop
+  # Acesso: http://localhost:3000
+  # -------------------------------------------------------
+  juice-shop:
+    image: bkimminich/juice-shop:latest
+    container_name: juice-shop
+    ports:
+      - "3000:3000"
+    networks:
+      - dast-net
+
+  # -------------------------------------------------------
+  # Scanner: OWASP ZAP (modo daemon)
+  # API REST: http://localhost:8080
+  # Proxy HTTP:  localhost:8888
+  # -------------------------------------------------------
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: zap
+    command: >
+      zap.sh -daemon
+      -host 0.0.0.0
+      -port 8080
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config api.key=${ZAP_API_KEY:-zapkey123}
+      -config proxy.port=8888
+      -config proxy.host=0.0.0.0
+    ports:
+      - "8080:8080"   # API REST do ZAP
+      - "8888:8888"   # Proxy HTTP (Puppeteer roteia tráfego por aqui)
+    networks:
+      - dast-net
+
+networks:
+  dast-net:
+    driver: bridge

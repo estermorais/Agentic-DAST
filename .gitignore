@@ -1,0 +1,47 @@
+# Dependências Node.js
+node_modules/
+dist/
+
+# Variáveis de ambiente (segredos)
+.env
+.env.local
+.env.*.local
+
+# Build TypeScript
+*.js.map
+*.d.ts
+
+# Relatórios gerados pelo agente
+agentic-dast/reports/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# LaTeX auxiliares (gerados na compilação)
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.nav
+*.snm
+*.vrb
+*.pdf
+
+# Claude Code
+.claude/

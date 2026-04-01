@@ -1,0 +1,703 @@
+%% ============================================================
+%% Pré-Projeto de TCC — Agentic DAST
+%% Ester Morais Neves — CEFET-MG — Março de 2026
+%% Compilar com pdfLaTeX (Overleaf: compilador padrão)
+%% ============================================================
+\documentclass[
+    12pt,
+    openany,
+    oneside,
+    a4paper,
+    brazil
+]{abntex2}
+
+%% ---- Codificação e idioma ------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[brazil]{babel}
+
+%% ---- Formatação geral ----------------------------------------
+\usepackage{indentfirst}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{geometry}
+
+%% ---- Tabelas -------------------------------------------------
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+
+%% ---- Matemática ----------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+%% ---- Código-fonte --------------------------------------------
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codeblue}{rgb}{0.0, 0.2, 0.6}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codeorange}{rgb}{0.8, 0.4, 0.0}
+\definecolor{backcolor}{rgb}{0.97,0.97,0.97}
+
+\lstdefinestyle{tccstyle}{
+    backgroundcolor=\color{backcolor},
+    commentstyle=\color{codegray},
+    keywordstyle=\bfseries\color{codeblue},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codeorange},
+    basicstyle=\small\ttfamily,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    frame=single,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    tabsize=2
+}
+\lstset{style=tccstyle, language=Java}
+
+%% ---- Hyperlinks ----------------------------------------------
+\usepackage{hyperref}
+\hypersetup{
+    pdftitle={Agentic DAST: Um Framework para Detecção de Vulnerabilidades em SPAs},
+    pdfauthor={Ester Morais Neves},
+    pdfsubject={Pré-projeto de Trabalho de Conclusão de Curso},
+    pdfkeywords={DAST, SPA, LLM, segurança, vulnerabilidades},
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    urlcolor=blue,
+    bookmarksdepth=4
+}
+
+%% ---- Referências (ABNT) --------------------------------------
+\usepackage[brazilian,hyperpageref]{backref}
+\usepackage[alf, abnt-emphasize=bf]{abntex2cite}
+
+\renewcommand{\backrefpagesname}{Citado na(s) página(s):~}
+\renewcommand{\backref}{}
+\renewcommand*{\backrefalt}[4]{%
+    \ifcase #1
+        Nenhuma citação no texto.
+    \or
+        Citado na página #2.
+    \else
+        Citado #1 vezes nas páginas #2.
+    \fi}
+
+%% ============================================================
+%% Metadados do documento
+%% ============================================================
+\titulo{Agentic DAST: Um Framework para Detecção Automatizada de
+Vulnerabilidades em Single Page Applications
+via Orquestração de LLMs e Navegação Semântica}
+
+\autor{Ester Morais Neves}
+\local{Belo Horizonte}
+\data{Março de 2026}
+\orientador{Prof. Mateus Felipe Tymburibá Ferreira}
+
+\instituicao{%
+  Centro Federal de Educação Tecnológica de Minas Gerais -- CEFET-MG
+  \par
+  Departamento de Engenharia de Computação
+}
+
+\tipotrabalho{Pré-projeto de Trabalho de Conclusão de Curso}
+
+\preambulo{%
+  Projeto de Conclusão de Curso apresentado ao Curso de Engenharia
+  de Computação do Centro Federal de Educação Tecnológica de Minas
+  Gerais, como requisito parcial à obtenção do título de Bacharel
+  em Engenharia de Computação.
+  \par
+  Área de concentração: Segurança de Software
+}
+
+\makeindex
+
+%% ============================================================
+\begin{document}
+%% ============================================================
+
+\selectlanguage{brazil}
+\frenchspacing
+
+% ----- Elementos pré-textuais --------------------------------
+\pretextual
+
+\imprimircapa
+\imprimirfolhaderosto
+
+\pdfbookmark[0]{\contentsname}{toc}
+\tableofcontents*
+\cleardoublepage
+
+% ----- Elementos textuais ------------------------------------
+\textual
+
+% =============================================================
+\chapter{Introdução}
+% =============================================================
+
+As aplicações web contemporâneas migraram progressivamente do modelo
+\textit{Multi-Page Application} (MPA), baseado em renderização no
+servidor e navegação por hiperlinks estáticos, para o paradigma das
+\textit{Single Page Applications} (SPAs). \textit{Frameworks} como
+Angular, React e Vue.js promoveram uma inversão arquitetural na qual
+toda a navegação é controlada por JavaScript no lado do cliente: o
+estado da aplicação se altera sem recarregamento de página, e o
+conteúdo é injetado dinamicamente no \textit{Document Object Model}
+(DOM) por chamadas assíncronas a APIs (AJAX/\textit{Fetch})
+\cite{stackhawk2024, getastra2024}.
+
+Essa evolução, embora positiva para a experiência do usuário e para a
+eficiência no desenvolvimento \textit{front-end}, criou uma lacuna
+crítica nas metodologias de testes dinâmicos de segurança. Ferramentas
+de \textit{Dynamic Application Security Testing} (DAST) consolidadas,
+como o OWASP ZAP e \textit{scanners} comerciais legados, foram
+projetadas para operar sobre o paradigma MPA, utilizando
+\textit{crawlers} que analisam estaticamente o HTML em busca de
+âncoras \texttt{<a>} para mapear a superfície de ataque
+\cite{brightsec2024}. Diante de uma SPA moderna, esses
+\textit{scanners} percebem uma única página opaca e são incapazes de
+explorar os estados internos da aplicação --- exatamente onde residem
+as vulnerabilidades mais críticas do ponto de vista de negócio.
+
+As SPAs introduzem duas classes de desafios para ferramentas de DAST.
+O primeiro é de \textbf{navegação}: sem renderização JavaScript, estados
+profundos (carrinho, painel administrativo, fluxo de checkout) permanecem
+inacessíveis. O segundo é de \textbf{interpretação semântica}: vulnerabilidades
+como Lógica de Negócio (\textit{Business Logic Vulnerabilities} --- BLVs),
+\textit{Cross-Site Scripting} (XSS) armazenado via campos dinâmicos,
+ataques a \textit{JSON Web Tokens} (JWT) e exposição de dados sensíveis
+em endpoints não documentados exigem compreensão do \textit{contexto} da
+aplicação --- algo estruturalmente impossível para ferramentas baseadas em
+correspondência de padrões sintáticos \cite{karadbhajne2025,portswigger2024}.
+Exemplos canônicos de BLVs incluem: manipulação de parâmetros para comprar
+itens com valor negativo, cupons de desconto em condições de corrida,
+acesso não autorizado a recursos de outros usuários (IDOR) e escalada de
+privilégios via adulteração de \textit{payload} JWT.
+
+A emergência de Grandes Modelos de Linguagem (LLMs) com capacidades
+avançadas de raciocínio --- como as séries Claude (Anthropic), GPT-4
+(OpenAI) e Llama~3 (Meta) --- introduziu uma nova via para o problema.
+LLMs são capazes de inferir a semântica de interfaces de usuário a
+partir do conteúdo do DOM, raciocinar sobre o propósito de fluxos de
+negócio e gerar hipóteses de ataque contextualmente relevantes. O
+padrão ReAct (\textit{Reasoning + Acting}) \cite{yao2023react} e a
+técnica de \textit{Chain-of-Thought} \cite{wei2022chain} demonstraram
+que LLMs podem alternar entre raciocínio e execução de ações de forma
+iterativa, comportamento diretamente aplicável à exploração autônoma de
+aplicações web.
+
+O presente trabalho propõe o \textbf{Agentic DAST}, um
+\textit{framework} que integra o raciocínio semântico de LLMs com a
+automação de navegadores via Puppeteer e o padrão Screenplay, com o
+objetivo de superar estatisticamente as ferramentas DAST tradicionais
+na detecção de vulnerabilidades em SPAs, cobrindo múltiplas categorias:
+Lógica de Negócio (BLV), \textit{Broken Access Control}, XSS, JWT e
+Exposição de Dados Sensíveis. A validação empírica será conduzida sobre
+a aplicação OWASP Juice Shop \cite{owaspjuiceshop}, escolhida por combinar
+arquitetura SPA realista (Angular + Node.js) com um catálogo documentado
+de vulnerabilidades de múltiplas categorias, provendo \textit{Ground Truth}
+confiável para o cálculo das métricas de eficácia.
+
+% =============================================================
+\chapter{Problema de Pesquisa}
+% =============================================================
+
+As ferramentas de DAST atuais falham sistematicamente na detecção de
+vulnerabilidades de lógica de negócio em SPAs, pois carecem da
+capacidade de navegar os estados internos dessas aplicações e de
+compreender o contexto semântico dos fluxos de negócio. Em paralelo,
+os avanços recentes em LLMs agênticos sugerem que tais sistemas podem
+raciocinar sobre a intenção de interfaces de usuário e gerar hipóteses
+de ataque contextualmente ricas --- mas a viabilidade e a eficácia
+desse paradigma para DAST em SPAs não foram demonstradas empiricamente
+na literatura.
+
+Diante desse cenário, formula-se o seguinte \textbf{problema de
+pesquisa}:
+
+\begin{quote}
+  \textit{Em que medida um framework de DAST baseado em agente autônomo
+  LLM, orquestrando um navegador headless via padrão Screenplay,
+  supera ferramentas tradicionais de DAST na detecção de vulnerabilidades
+  em Single Page Applications, abrangendo categorias como Lógica de Negócio,
+  Broken Access Control, XSS, JWT e Exposição de Dados Sensíveis?}
+\end{quote}
+
+% =============================================================
+\chapter{Justificativa}
+% =============================================================
+
+\section{Dimensão Acadêmica}
+
+A literatura científica sobre DAST para SPAs é escassa e concentra-se
+predominantemente na caracterização das limitações de ferramentas
+existentes, sem propor artefatos que as superem de forma empiricamente
+mensurável \cite{brightsec2024, stackhawk2024}. Trabalhos recentes
+sobre \textit{LLM-guided fuzzing} \cite{yang2025hybrid} demonstraram
+resultados promissores para protocolos e linguagens de programação, mas
+não abordaram o problema de navegar SPAs e detectar BLVs em contexto
+web interativo. O Agentic DAST preenche essa lacuna com um artefato
+tecnológico mensurável, validado por experimento controlado e
+potencialmente publicável em conferências nacionais de Engenharia de
+Software ou Segurança da Informação (SBES, SBSEG ou WebMedia).
+
+\section{Dimensão Social e Profissional}
+
+SPAs dominam o desenvolvimento web contemporâneo. A indústria
+brasileira adota massivamente React e Angular em sistemas críticos:
+portais bancários, plataformas de e-commerce, sistemas de saúde e
+serviços governamentais. Uma ferramenta de DAST semanticamente
+consciente tem aplicação direta em \textit{pipelines} de DevSecOps de
+organizações de todos os portes, reduzindo o custo e o tempo de
+detecção de vulnerabilidades que hoje dependem de auditorias manuais
+dispendiosas. O \textit{framework} resultante será disponibilizado como
+código aberto, democratizando o acesso a testes de segurança avançados.
+
+\section{Dimensão Pessoal}
+
+O interesse pela interseção entre segurança ofensiva e inteligência
+artificial emergiu ao longo do curso de Engenharia de Computação,
+especialmente após o estudo das disciplinas de Redes de Computadores e
+Segurança da Informação. A possibilidade de aplicar raciocínio
+computacional para automatizar uma tarefa hoje restrita a especialistas
+humanos --- o \textit{pentest} de aplicações web --- representa um
+desafio técnico e científico de alta relevância prática e pessoal.
+
+% =============================================================
+\chapter{Objetivos}
+% =============================================================
+
+\section{Objetivo Geral}
+
+Desenvolver e validar experimentalmente o \textbf{Agentic DAST}, um
+\textit{framework} que integra raciocínio semântico de LLMs com
+automação de navegadores via Puppeteer e padrão Screenplay,
+demonstrando superioridade estatística em métricas de \textit{Recall}
+e F1-\textit{Score} na detecção de vulnerabilidades de lógica de
+negócio em SPAs, em comparação com abordagens DAST tradicionais.
+
+\section{Objetivos Específicos}
+
+\begin{enumerate}
+  \item \textbf{Realizar revisão sistemática} da literatura sobre:
+  (i)~limitações de DAST em SPAs; (ii)~LLMs agênticos e padrão ReAct;
+  (iii)~\textit{Chrome DevTools Protocol} (CDP) versus WebDriver;
+  (iv)~padrão Screenplay; (v)~\textit{fuzzing} semântico guiado por
+  LLMs.
+
+  \item \textbf{Construir a Matriz de \textit{Ground Truth}} do OWASP
+  Juice Shop, mapeando e classificando as vulnerabilidades de lógica de
+  negócio do catálogo oficial como gabarito para o experimento
+  comparativo.
+
+  \item \textbf{Projetar e implementar os quatro módulos} do
+  \textit{framework}: Módulo de Percepção (extrator DOM via CDP),
+  Módulo Cognitivo (agente LLM com \textit{loop} ReAct e memória),
+  Módulo Executor (Screenplay + Puppeteer com \textit{Abuse Cases}) e
+  Módulo de Auditoria (OWASP ZAP \textit{daemon}).
+
+  \item \textbf{Desenvolver biblioteca de \textit{Abuse Cases}} para as
+  categorias de vulnerabilidades de lógica de negócio prioritárias
+  (IDOR, manipulação de preço, condição de corrida, \textit{JWT
+  forgery}, enumeração, \textit{information disclosure}), cobrindo no
+  mínimo oito categorias distintas.
+
+  \item \textbf{Implementar o \textit{Semantic Fuzzer}}, componente que
+  utiliza LLM para gerar \textit{payloads} contextualmente relevantes
+  a partir da análise semântica dos campos da interface, e avaliar sua
+  superioridade em relação ao \textit{fuzzing} aleatório em cobertura
+  de caminhos lógicos.
+
+  \item \textbf{Conduzir experimento comparativo controlado} com três
+  cenários --- (A) ZAP puro, (B) ZAP guiado por suíte E2E pré-gravada,
+  (C) Agentic DAST autônomo em modo \textit{black-box} --- com três
+  rodadas cada, analisando os resultados pelas métricas
+  \textit{Recall}, \textit{Precision}, F1-\textit{Score} e Cobertura
+  de \textit{Endpoints}.
+\end{enumerate}
+
+% =============================================================
+\chapter{Questões de Pesquisa e Hipóteses}
+% =============================================================
+
+\section{Questões de Pesquisa}
+
+\begin{description}
+  \item[\textbf{QP1}] O Agentic DAST autônomo (Cenário~C) obtém
+  \textit{Recall} significativamente superior ao OWASP ZAP tradicional
+  (Cenário~A) na detecção de vulnerabilidades de lógica de negócio no
+  OWASP Juice Shop?
+
+  \item[\textbf{QP2}] A capacidade de navegação semântica do Agentic
+  DAST resulta em maior cobertura de \textit{endpoints} e estados de UI
+  do OWASP Juice Shop em comparação com os \textit{baselines}?
+
+  \item[\textbf{QP3}] O \textit{Semantic Fuzzer} baseado em LLM gera
+  \textit{payloads} que cobrem caminhos lógicos distintos dos cobertos
+  pelo \textit{fuzzing} aleatório, produzindo detecções adicionais?
+\end{description}
+
+\section{Hipóteses Testáveis}
+
+\begin{description}
+  \item[\textbf{H1}] O Agentic DAST (Cenário~C) detecta, em média, um
+  número estatisticamente significativamente maior de vulnerabilidades
+  de lógica de negócio verdadeiro-positivas do que o OWASP ZAP puro
+  (Cenário~A), medido pelo \textit{Recall}.
+
+  \textit{Critério de confirmação:} $\text{Recall}(C) > \text{Recall}(A)$
+  com diferença estatisticamente significativa ($p < 0{,}05$, teste de
+  Wilcoxon para amostras emparelhadas, $n = 3$ rodadas).
+
+  \item[\textbf{H2}] A cobertura de \textit{endpoints} da aplicação
+  alvo pelo Agentic DAST é superior à dos Cenários~A e~B, demonstrando
+  que a navegação guiada por LLM explora mais estados da SPA.
+
+  \textit{Critério de confirmação:}
+  $\text{Endpoints}(C) > \text{Endpoints}(A)$ e
+  $\text{Endpoints}(C) > \text{Endpoints}(B)$.
+
+  \item[\textbf{H3}] Os \textit{payloads} gerados pelo \textit{Semantic
+  Fuzzer} ativam, em média, mais vulnerabilidades de lógica de negócio
+  por \textit{payload} testado do que \textit{payloads} gerados por
+  \textit{fuzzing} aleatório sobre os mesmos campos.
+
+  \textit{Critério de confirmação:} Taxa de detecção semântica $>$
+  taxa de detecção aleatória, avaliada quantitativamente e
+  qualitativamente sobre amostras pareadas de \textit{payloads}.
+\end{description}
+
+% =============================================================
+\chapter{Fundamentação Teórica Preliminar}
+% =============================================================
+
+Esta seção apresenta os pilares conceituais que embasam o
+\textit{framework} proposto. Uma revisão sistemática aprofundada será
+conduzida na Fase~1 do projeto.
+
+\section{DAST em SPAs e Vulnerabilidades de Lógica de Negócio}
+
+O \textit{Dynamic Application Security Testing} (DAST) testa
+aplicações em tempo de execução, sem acesso ao código-fonte. As
+ferramentas tradicionais baseiam-se em \textit{spiders} que percorrem
+hiperlinks HTML estáticos, tornando-se cegas diante do roteamento
+\textit{client-side} das SPAs \cite{stackhawk2024}. Vulnerabilidades de
+Lógica de Negócio diferem das vulnerabilidades técnicas clássicas
+(injeção SQL, XSS) por exigirem compreensão do domínio da aplicação
+para serem detectadas \cite{portswigger2024, karadbhajne2025}.
+
+\section{Chrome DevTools Protocol e Automação de Navegadores}
+
+O \textit{Chrome DevTools Protocol} (CDP) provê uma interface
+bidirecional de baixo nível com o motor Chromium/Blink via WebSockets,
+permitindo intercepção de rede em tempo real, instrumentação de
+JavaScript e isolamento de sessão com granularidade inacessível ao
+Selenium WebDriver \cite{lightpanda2024}. O Puppeteer expõe o CDP de
+forma quase direta, sendo o instrumento ideal para testes de segurança
+ofensiva que exigem manipulação de requisições HTTP em nível de
+protocolo.
+
+\section{Padrão Screenplay}
+
+O Screenplay Pattern \cite{serenityscreenplay} modela a automação de
+testes em termos de cinco elementos fundamentais: Atores, Habilidades,
+Tarefas, Interações e Perguntas. Ao desacoplar a intenção (Tarefa) da
+implementação (Interação), permite que o Módulo Cognitivo raciocine em
+termos semânticos de alto nível, sem necessidade de conhecer os
+seletores CSS exatos da aplicação, que são resolvidos em tempo de
+execução pelo Módulo Executor.
+
+\section{LLMs Agênticos e o Padrão ReAct}
+
+\citeonline{yao2023react} introduziram o padrão ReAct
+(\textit{Reasoning + Acting}), no qual o LLM intercala passos de
+raciocínio (\textit{thought}), ações executáveis (\textit{action}) e
+observações do ambiente (\textit{observation}), produzindo trajetórias
+de decisão interpretáveis. \citeonline{wei2022chain} demonstraram que
+\textit{Chain-of-Thought prompting} habilita LLMs a resolver problemas
+de múltiplas etapas com eficácia superior a abordagens diretas. Esses
+paradigmas formam a base algorítmica do Módulo Cognitivo do Agentic
+DAST.
+
+\section{Fuzzing Semântico Guiado por LLMs}
+
+\textit{Fuzzing} semântico avança o \textit{fuzzing} tradicional ao
+gerar entradas que respeitam a gramática e o contexto da aplicação, mas
+violam suas regras lógicas. \citeonline{yang2025hybrid} demonstraram
+que LLMs com \textit{constraint solving} podem gerar \textit{payloads}
+que cobrem caminhos de execução profundos inacessíveis a
+\textit{fuzzers} por mutação aleatória. O \textit{Semantic Fuzzer} do
+Agentic DAST aplica esse princípio ao contexto de campos de formulário
+em SPAs.
+
+% =============================================================
+\chapter{Metodologia}
+% =============================================================
+
+A pesquisa adota a abordagem de \textbf{Design Science Research} (DSR)
+\cite{hevner2004design}, que combina o desenvolvimento de um artefato
+tecnológico com a geração de conhecimento científico rigoroso sobre sua
+eficácia. O trabalho é dividido entre TCC~I e TCC~II, em sete fases
+sequenciais, apresentadas na Tabela~\ref{tab:fases}.
+
+% ----- Tabela de fases ----------------------------------------
+\begin{longtable}{p{0.6cm}p{1.6cm}p{2.0cm}p{5.2cm}p{3.0cm}}
+\caption{Fases do projeto e entregáveis.\label{tab:fases}}\\
+\toprule
+\textbf{F} & \textbf{Sem.} & \textbf{Período} &
+\textbf{Atividades Principais} & \textbf{Entregável} \\
+\midrule
+\endfirsthead
+\multicolumn{5}{l}{\textit{(Continuação da Tabela~\ref{tab:fases})}}\\
+\toprule
+\textbf{F} & \textbf{Sem.} & \textbf{Período} &
+\textbf{Atividades Principais} & \textbf{Entregável} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{5}{r}{\textit{Continua na próxima página}}\\
+\endfoot
+\bottomrule
+\endlastfoot
+
+F1 & S01–S07 & Mar–Abr 2026 &
+Revisão sistemática (DAST em SPAs, LLMs agênticos, CDP, Screenplay,
+fuzzing semântico); Construção da Matriz de Ground Truth &
+Relatório Estado da Arte + Matriz GT \\[4pt]
+
+F2 & S08–S11 & Abr–Mai 2026 &
+Provisionamento Docker Compose: Juice Shop, ZAP daemon, Node.js
++ Puppeteer + Serenity/JS; estruturação do repositório &
+Infraestrutura operacional \\[4pt]
+
+F3 & S12–S19 & Mai–Jul 2026 &
+Módulo Executor: Atores, Habilidades, Tarefas, primeiros Abuse Cases
+(IDOR, preço negativo, feedback inválido) &
+Biblioteca de Atores + 3 Abuse Cases \\[4pt]
+
+F4 & S20–S27 & Jul–Set 2026 &
+Módulo Cognitivo: loop ReAct, memória de curto/longo prazo, prompt
+engineering iterativo, self-healing; integração Claude Haiku 4.5 /
+Sonnet 4.6 &
+Agente autônomo funcional \\[4pt]
+
+F5 & S28–S31 & Set–Out 2026 &
+Abuse Cases completos (JWT forgery, condição de corrida, enumeração);
+Semantic Fuzzer &
+8+ Abuse Cases + Semantic Fuzzer \\[4pt]
+
+F6 & S32–S35 & Out 2026 &
+Experimento comparativo (Cenários A, B, C); coleta e análise
+estatística &
+Tabelas VP/FP/FN + gráficos P/R/F1 \\[4pt]
+
+F7 & S36 & Nov 2026 &
+Redação do TCC (normas ABNT); submissão à banca; adaptação para artigo
+científico &
+TCC entregue + artigo submetido \\
+
+\end{longtable}
+
+\section{Protocolo Experimental}
+
+O experimento comparativo (Fase~6) seguirá o protocolo a seguir.
+
+\begin{itemize}
+  \item \textbf{Objeto de estudo:} OWASP Juice Shop, versão estável
+  mais recente, instância Docker isolada.
+
+  \item \textbf{Cenário A --- Baseline Tradicional:} OWASP ZAP~2.x com
+  \textit{spider} padrão, sem configuração adicional.
+
+  \item \textbf{Cenário B --- Baseline E2E:} OWASP ZAP com
+  \textit{spider} + suíte de testes funcionais E2E (Serenity/JS,
+  Caminho Feliz) pré-gravada guiando o \textit{proxy}.
+
+  \item \textbf{Cenário C --- Experimental:} Agentic DAST em modo
+  \textit{black-box}, sem conhecimento prévio da estrutura da
+  aplicação.
+
+  \item \textbf{Repetições:} Três rodadas por cenário ($n = 3$), com
+  reinicialização do banco de dados do Juice Shop entre rodadas para
+  garantir estado inicial idêntico.
+
+  \item \textbf{Análise estatística:} Média e desvio-padrão por
+  cenário; teste de Wilcoxon (amostras emparelhadas) para comparação
+  entre cenários, com $\alpha = 0{,}05$.
+\end{itemize}
+
+\section{Métricas de Avaliação}
+
+A Tabela~\ref{tab:metricas} apresenta as métricas a serem coletadas e
+calculadas para cada cenário.
+
+\begin{table}[htb]
+\centering
+\caption{Métricas de avaliação do experimento comparativo.%
+\label{tab:metricas}}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Métrica} & \textbf{Descrição} \\
+\midrule
+Verdadeiro Positivo (VP) &
+  Vulnerabilidade presente na Matriz GT detectada corretamente \\[2pt]
+Falso Positivo (FP) &
+  Alerta gerado para algo que não constitui vulnerabilidade \\[2pt]
+Falso Negativo (FN) &
+  Vulnerabilidade presente na Matriz GT não detectada \\[2pt]
+\textit{Recall} &
+  $\text{VP} / (\text{VP} + \text{FN})$ --- taxa de cobertura das BLVs
+  conhecidas \\[2pt]
+\textit{Precision} &
+  $\text{VP} / (\text{VP} + \text{FP})$ --- taxa de alertas verdadeiros
+  \\[2pt]
+F1-\textit{Score} &
+  $2 \cdot (\text{Precision} \cdot \text{Recall}) /
+  (\text{Precision} + \text{Recall})$ \\[2pt]
+Cobertura de \textit{Endpoints} &
+  Número de rotas de API e estados de UI descobertos \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Ameaças à Validade}
+
+\textbf{Validade interna:} A natureza probabilística dos LLMs pode
+introduzir variação entre rodadas. Será controlada via temperatura fixa
+($T = 0{,}3$), mesma versão de modelo e API, e análise do
+desvio-padrão entre as três rodadas.
+
+\textbf{Validade externa:} Os resultados são obtidos sobre o OWASP
+Juice Shop (aplicação propositalmente vulnerável); a generalização para
+sistemas reais exige validação adicional em ambientes de
+\textit{staging} corporativo, prevista como entregável da Fase~7.
+
+\textbf{Validade de construção:} A Matriz de \textit{Ground Truth} que
+define o que é e o que não é uma vulnerabilidade de lógica de negócio
+no Juice Shop será construída a partir do catálogo oficial da OWASP,
+reduzindo viés de seleção subjetivo.
+
+% =============================================================
+\chapter{Infraestrutura Necessária}
+% =============================================================
+
+\section{Hardware e Software}
+
+\begin{itemize}
+  \item Computador pessoal com mínimo de 16~GB de RAM e 30~GB livres
+  para containers Docker.
+  \item Docker Desktop para orquestração dos três containers: Juice
+  Shop, ZAP e Node.js.
+  \item Node.js 20 LTS e Git para desenvolvimento e versionamento.
+  \item VS Code com GitHub Copilot, disponível via GitHub Student
+  Developer Pack.
+\end{itemize}
+
+\section{APIs de LLM}
+
+\begin{itemize}
+  \item \textbf{Claude API (Anthropic):} Haiku 4.5 (classificação
+  rápida) e Sonnet 4.6 (raciocínio principal) com
+  \textit{Prompt Caching} automático (redução de até 90\% no custo de
+  \textit{tokens} repetidos). LLM principal do projeto
+  \cite{anthropicdocs}.
+
+  \item \textbf{Google AI Studio:} Gemini 2.5 Flash-Lite (1.000
+  req/dia gratuitas) como \textit{fallback} sem custo.
+
+  \item \textbf{Groq Cloud:} Llama 3.1 8B Instant (14.400 req/dia
+  gratuitas) para iterações de alta frequência.
+
+  \item \textbf{Ollama (local):} Llama 3 8B para desenvolvimento e
+  depuração 100\% \textit{offline}, sem consumo de cotas.
+\end{itemize}
+
+\section{Dependências e Limitações Reconhecidas}
+
+O trabalho não depende de participantes externos: todos os experimentos
+são executados em ambiente Docker isolado e controlado. Requer
+orientação periódica do orientador e aprovação do protocolo
+experimental antes da execução dos cenários comparativos (Fase~6). A
+qualidade dos resultados depende parcialmente dos \textit{prompts} de
+sistema e da versão do LLM utilizado; variações nas cotas gratuitas das
+APIs podem exigir ajustes no roteador de modelos durante os
+experimentos.
+
+% =============================================================
+\chapter{Resultados Esperados}
+% =============================================================
+
+Ao término do trabalho, espera-se obter:
+
+\begin{enumerate}
+  \item \textbf{\textit{Framework} funcional e de código aberto}
+  (Agentic DAST), disponibilizado em repositório Git público com
+  instruções de instalação, configuração e exemplos de uso.
+
+  \item \textbf{Evidência empírica de superioridade} do Agentic DAST
+  em \textit{Recall} e F1-\textit{Score} para BLVs, validada por
+  experimento controlado (3 execuções por cenário, análise estatística).
+
+  \item \textbf{Biblioteca de \textit{Abuse Cases} reutilizável} para
+  SPAs, modelada com Screenplay Pattern, cobrindo no mínimo oito
+  categorias de vulnerabilidades de lógica de negócio.
+
+  \item \textbf{\textit{Semantic Fuzzer}} demonstravelmente superior ao
+  \textit{fuzzing} aleatório na cobertura de caminhos lógicos, com
+  análise qualitativa das cadeias de raciocínio do LLM.
+
+  \item \textbf{Artigo científico} submetido a conferência nacional de
+  Engenharia de Software ou Segurança da Informação (SBES, SBSEG ou
+  WebMedia).
+
+  \item \textbf{Relatório de aplicação} do \textit{framework} em
+  ambiente de \textit{staging} corporativo, demonstrando
+  transferibilidade para contextos industriais.
+\end{enumerate}
+
+% =============================================================
+\chapter{Cronograma}
+% =============================================================
+
+O projeto será desenvolvido ao longo de \textbf{36 semanas},
+distribuídas entre TCC~I (Fases 1--3, março a julho de 2026) e TCC~II
+(Fases 4--7, julho a novembro de 2026). A Tabela~\ref{tab:cronograma}
+apresenta os marcos principais do projeto.
+
+\begin{table}[htb]
+\centering
+\caption{Marcos e datas-chave do projeto.\label{tab:cronograma}}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Marco} & \textbf{Data} & \textbf{Semana} \\
+\midrule
+Início do projeto                              & 09/03/2026  & S01      \\
+Infraestrutura Docker pronta                   & 27/04/2026  & S08      \\
+Entrega TCC~I (Módulo Executor + Ground Truth) & Jul. 2026   & S19      \\
+Agente autônomo funcionando (demo)             & 07/09/2026  & S27      \\
+Experimentos concluídos                        & 05/10/2026  & S31      \\
+Início da redação formal                       & 06/10/2026  & S32      \\
+Entrega final TCC~II                           & 16/11/2026  & S36      \\
+Submissão do artigo científico                 & 30/11/2026  & Pós-S36  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ----- Pós-textuais ------------------------------------------
+\postextual
+
+\bibliography{referencias}
+
+\end{document}
