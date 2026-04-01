@@ -5,6 +5,9 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "ts-node src/index.ts",
+    "scenario:a": "ts-node src/scenarios/scenario-a.ts",
+    "scenario:b": "ts-node src/scenarios/scenario-b.ts",
+    "scenario:c": "ts-node src/index.ts",
     "build": "tsc",
     "dev": "ts-node --watch src/index.ts"
   },

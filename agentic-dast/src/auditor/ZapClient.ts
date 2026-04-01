@@ -138,6 +138,80 @@ export class ZapClient {
     }
   }
 
+  // ===========================================================
+  // Spider Tradicional
+  // ===========================================================
+
+  /**
+   * Dispara o spider tradicional do ZAP na URL especificada.
+   * Retorna o ID do scan ou null em caso de falha.
+   * Usado pelo Cenário A do experimento comparativo.
+   */
+  async startSpider(url: string): Promise<string | null> {
+    console.log(`[Auditoria] Iniciando spider em: ${url}`);
+
+    try {
+      const response = await axios.get(`${this.baseUrl}/JSON/spider/action/scan/`, {
+        params: {
+          url,
+          apikey:    this.apiKey,
+          maxChildren: 10,
+          recurse:   true,
+          contextName: '',
+          subtreeOnly: false,
+        },
+        timeout: 10_000,
+        validateStatus: () => true,
+      });
+
+      const scanId: string | undefined = response.data?.scan;
+      if (!scanId) {
+        console.warn('[Auditoria] ZAP spider não retornou scan ID.');
+        return null;
+      }
+
+      console.log(`[Auditoria] Spider iniciado. ID: ${scanId}`);
+      return scanId;
+
+    } catch (err) {
+      console.warn(`[Auditoria] Erro ao iniciar spider: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Aguarda a conclusão do spider (polling a cada 5s).
+   * Retorna true se concluiu dentro do timeout.
+   */
+  async waitForSpiderCompletion(scanId: string, timeoutMs = 300_000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      try {
+        const response = await axios.get(`${this.baseUrl}/JSON/spider/view/status/`, {
+          params: { scanId, apikey: this.apiKey },
+          timeout: 5_000,
+          validateStatus: () => true,
+        });
+
+        const progress = parseInt(response.data?.status ?? '0', 10);
+        process.stdout.write(`\r[Auditoria] Spider: ${progress}%   `);
+
+        if (progress >= 100) {
+          console.log('\n[Auditoria] Spider concluído.');
+          return true;
+        }
+      } catch {
+        // ZAP pode estar ocupado; tenta novamente
+      }
+
+      await this.sleep(5_000);
+    }
+
+    console.warn('\n[Auditoria] Timeout aguardando conclusão do spider.');
+    return false;
+  }
+
   /**
    * Aguarda a conclusão de um scan ativo (polling a cada 5s).
    * Retorna true se concluiu dentro do timeout, false caso contrário.
