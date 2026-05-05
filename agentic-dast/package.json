@@ -8,7 +8,8 @@
     "scenario:a": "ts-node src/scenarios/scenario-a.ts",
     "scenario:b": "ts-node src/scenarios/scenario-b.ts",
     "scenario:c": "ts-node src/index.ts",
-    "build": "tsc",
+    "evaluate": "ts-node src/evaluation/evaluate.ts",
+    "build": "tsc && node -e \"require('fs').copyFileSync('src/evaluation/ground-truth.json', 'dist/evaluation/ground-truth.json')\"",
     "dev": "ts-node --watch src/index.ts"
   },
   "dependencies": {
