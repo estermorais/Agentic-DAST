@@ -1,15 +1,17 @@
 # Dependências Node.js
 node_modules/
-dist/
 
 # Variáveis de ambiente (segredos)
 .env
 .env.local
 .env.*.local
 
-# Build TypeScript
+# Build TypeScript — a pasta dist/ é versionada (contém os .js compilados),
+# mas os arquivos auxiliares (.js.map e .d.ts) são ignorados para manter o
+# diff limpo e o repositório legível.
 *.js.map
 *.d.ts
+*.d.ts.map
 
 # Relatórios gerados pelo agente
 agentic-dast/reports/
