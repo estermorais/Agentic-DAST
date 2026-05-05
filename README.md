@@ -43,20 +43,36 @@ Percepção → Cognitivo → Executor → Abuse Cases → Auditoria → Relató
 
 ```
 .
-├── agentic-dast/               ← Código do framework
-│   ├── src/
-│   │   ├── index.ts            ← Orquestrador principal
-│   │   ├── cognitive/          ← Agente LLM (ReAct loop)
-│   │   ├── perception/         ← Extrator DOM e AppMap
-│   │   ├── executor/           ← Screenplay + Abuse Cases
-│   │   └── auditor/            ← Cliente OWASP ZAP
-│   ├── docker-compose.yml      ← Juice Shop + ZAP + Agent
-│   ├── DOCUMENTACAO.md         ← Documentação técnica completa
-│   └── PSEUDOCODIGO.md         ← Pseudocódigo do agente
+├── README.md
 │
-├── pre_projeto_agentic_dast.tex  ← Pré-projeto (abntex2)
-├── artigo_agentic_dast.tex       ← Versão artigo (SBC/IEEE)
-└── referencias.bib               ← Referências bibliográficas
+├── agentic-dast/                  ← Código do framework
+│   ├── src/                       ← TypeScript (fonte autoritativo)
+│   │   ├── index.ts               ← Orquestrador principal (Cenário C)
+│   │   ├── perception/            ← Extrator DOM e AppMap
+│   │   ├── cognitive/             ← Agente LLM (ReAct loop)
+│   │   ├── executor/              ← Screenplay + Abuse Cases
+│   │   ├── auditor/               ← Cliente OWASP ZAP
+│   │   ├── scenarios/             ← Cenários A e B (baselines)
+│   │   └── evaluation/            ← Pipeline de Precision/Recall/F1
+│   ├── dist/                      ← JavaScript compilado (npm run build)
+│   ├── docs/                      ← Documentação técnica do framework
+│   │   ├── DOCUMENTACAO.md
+│   │   └── PSEUDOCODIGO.md
+│   ├── docker-compose.yml         ← Juice Shop + ZAP
+│   ├── package.json
+│   └── tsconfig.json
+│
+└── docs/                          ← Documentação acadêmica
+    ├── artigo/                    ← Artigo TCC + pré-projeto + bib
+    │   ├── artigo_agentic_dast.tex
+    │   ├── pre_projeto_agentic_dast.tex
+    │   └── referencias.bib
+    ├── metodologia/               ← Atividades da disciplina Met. de Pesquisa
+    │   ├── metodologia_aa1.tex
+    │   └── metodologia_aa2.tex
+    └── apresentacao/              ← Materiais para reunião com orientador
+        ├── APRESENTACAO_ORIENTADOR.md
+        └── MAPA_DO_PROJETO.md
 ```
 
 ---
