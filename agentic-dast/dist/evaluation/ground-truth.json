@@ -128,7 +128,7 @@
       "challengeName": "Confidential Document",
       "description": "Arquivo /ftp/acquisitions.md acessível sem autenticação.",
       "endpoint": "GET /ftp/acquisitions.md",
-      "detectionKeywords": ["ftp", "acquisitions", "confidential document", "ftp directory"],
+      "detectionKeywords": ["ftp", "acquisitions", "confidential document", "ftp directory", "exposição de dados sensíveis", "recursos acessíveis sem autenticação"],
       "expectedSeverity": "MEDIUM"
     },
     {
