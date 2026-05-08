@@ -139,7 +139,7 @@ function printReport(agentResult, abuseFindings, zapFindings, allFindings) {
     console.log('RESUMO DA SESSÃO');
     console.log(divider);
     console.log(`Iterações ReAct      : ${agentResult.totalIterations}`);
-    console.log(`Encerramento limpo   : ${agentResult.finishedCleanly ? 'sim' : 'não (limite atingido)'}`);
+    console.log(`Encerramento limpo   : ${agentResult.finishedCleanly ? 'sim' : 'não'}`);
     console.log(`Sumário do agente    : ${agentResult.summary}`);
     console.log(divider);
     console.log(`Findings (ReAct)     : ${agentResult.findings.length}`);
