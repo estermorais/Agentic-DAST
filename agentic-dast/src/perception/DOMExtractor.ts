@@ -293,28 +293,69 @@ export class DOMExtractor {
     });
 
     try {
+      // 1. Visita a home primeiro para capturar banners persistentes
+      await page.goto(`${config.targetUrl}/#/`, {
+        waitUntil: 'networkidle2',
+        timeout: 15_000,
+      });
+      await this.sleep(1500);
+
+      // 2. Dismissa o welcome banner (versões recentes do Juice Shop o exibem
+      //    no primeiro acesso e ele intercepta cliques no formulário)
+      await page.evaluate(() => {
+        document.querySelectorAll<HTMLButtonElement>(
+          'button[aria-label="Close Welcome Banner"], ' +
+          'button[aria-label="dismiss cookie message"], ' +
+          'button.close-dialog, ' +
+          'button.mat-button',
+        ).forEach((btn) => {
+          if (/dismiss|close/i.test(btn.textContent ?? '') ||
+              btn.getAttribute('aria-label')?.toLowerCase().includes('close')) {
+            btn.click();
+          }
+        });
+      }).catch(() => { /* tolera ausência de banner */ });
+      await this.sleep(500);
+
+      // 3. Vai para a tela de login
       await page.goto(`${config.targetUrl}/#/login`, {
         waitUntil: 'networkidle2',
         timeout: 15_000,
       });
-      await this.sleep(1000);
+      await this.sleep(1500);
 
-      // Preenche e-mail
-      await page.type('#email', 'customer@juice-sh.op');
-      await this.sleep(300);
+      // 4. Preenche e submete (com tolerância a falha de seletor)
+      try {
+        await page.type('#email', 'customer@juice-sh.op', { delay: 30 });
+        await page.type('#password', 'customer', { delay: 30 });
+        await this.sleep(300);
+        await page.click('#loginButton');
+      } catch (err) {
+        console.warn(`[Percepção] Falha ao preencher login: ${(err as Error).message}`);
+      }
+      await this.sleep(3000);
 
-      // Preenche senha
-      await page.type('#password', 'customer');
-      await this.sleep(300);
-
-      // Clica em "Log in"
-      await page.click('#loginButton');
-      await this.sleep(2000);
-
-      // Lê JWT do localStorage (Juice Shop guarda lá)
+      // 5. Tenta capturar o JWT por múltiplas estratégias
       if (!jwt) {
         jwt = await page.evaluate(() => {
-          return localStorage.getItem('token') ?? undefined;
+          // Estratégia A: localStorage.token (versão antiga e atual)
+          const fromToken = localStorage.getItem('token');
+          if (fromToken) return fromToken;
+
+          // Estratégia B: localStorage com chave que contenha 'token' ou 'auth'
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && /token|auth|jwt/i.test(key)) {
+              const v = localStorage.getItem(key);
+              if (v && v.includes('.')) return v;  // JWT contém '.'
+            }
+          }
+
+          // Estratégia C: cookie 'token'
+          const match = document.cookie.match(/token=([^;]+)/);
+          if (match) return match[1];
+
+          return undefined;
         });
       }
 
@@ -325,7 +366,7 @@ export class DOMExtractor {
         cookies[c.name] = c.value;
       }
 
-      console.log(`[Percepção] Auth coletado. JWT: ${jwt ? 'sim' : 'não encontrado'}`);
+      console.log(`[Percepção] Auth coletado. JWT: ${jwt ? 'sim (' + jwt.substring(0, 20) + '...)' : 'não encontrado'}`);
 
       return {
         jwt,
