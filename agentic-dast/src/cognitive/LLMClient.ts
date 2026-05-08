@@ -83,30 +83,54 @@ class OllamaClient implements LLMClient {
   }
 
   async chat(systemPrompt: string, history: ChatMessage[]): Promise<string> {
-    const response = await axios.post(
-      `${this.baseUrl}/api/chat`,
-      {
-        model:   this.model,
-        stream:  false,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...history,
-        ],
-        options: {
-          // Janela de contexto suficiente para o histórico do loop ReAct
-          num_ctx: 8192,
-          // Temperatura padrão (mantém variabilidade similar ao Claude)
-          temperature: 1.0,
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/api/chat`,
+        {
+          model:   this.model,
+          stream:  false,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history,
+          ],
+          options: {
+            // Janela de contexto: 32K para acomodar AppMap completo + histórico
+            // (Qwen 2.5 suporta até 128K; 32K cobre casos reais com folga)
+            num_ctx: 32768,
+            // Temperatura padrão (mantém variabilidade similar ao Claude)
+            temperature: 1.0,
+          },
         },
-      },
-      { timeout: 120_000 },
-    );
+        {
+          timeout: 180_000,
+          // Não rejeita automaticamente em status >= 400 — deixa a gente
+          // extrair a mensagem de erro do corpo da resposta
+          validateStatus: () => true,
+        },
+      );
 
-    const content = response.data?.message?.content;
-    if (typeof content !== 'string') {
-      throw new Error(`Ollama retornou resposta inesperada: ${JSON.stringify(response.data)}`);
+      // Tratamento explícito de erros com a mensagem real do Ollama
+      if (response.status >= 400) {
+        const errMsg = response.data?.error
+          ?? JSON.stringify(response.data).substring(0, 500);
+        throw new Error(`Ollama HTTP ${response.status}: ${errMsg}`);
+      }
+
+      const content = response.data?.message?.content;
+      if (typeof content !== 'string') {
+        throw new Error(`Ollama retornou resposta inesperada: ${JSON.stringify(response.data).substring(0, 500)}`);
+      }
+      return content;
+    } catch (err) {
+      // Re-emite o erro com mensagem útil em vez do stack trace genérico do axios
+      if (axios.isAxiosError(err) && err.response) {
+        const data = err.response.data;
+        const errMsg = (data as { error?: string })?.error
+          ?? JSON.stringify(data).substring(0, 500);
+        throw new Error(`Ollama HTTP ${err.response.status}: ${errMsg}`);
+      }
+      throw err;
     }
-    return content;
   }
 }
 
