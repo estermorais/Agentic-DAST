@@ -13,20 +13,17 @@
  * no mundo real (browser/HTTP); o resultado volta como Observation.
  * ---------------------------------------------------------------
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReActAgent = void 0;
-const sdk_1 = __importDefault(require("@anthropic-ai/sdk"));
 const config_1 = require("../config");
 const prompts_1 = require("./prompts");
+const LLMClient_1 = require("./LLMClient");
 class ReActAgent {
-    client;
+    llm;
     dispatcher;
     conversationHistory = [];
-    constructor(dispatcher) {
-        this.client = new sdk_1.default({ apiKey: config_1.config.anthropicApiKey });
+    constructor(dispatcher, llm) {
+        this.llm = llm ?? (0, LLMClient_1.createLLMClient)();
         this.dispatcher = dispatcher;
     }
     /**
@@ -35,7 +32,7 @@ class ReActAgent {
      */
     async run(appMap) {
         console.log('\n[Cognitivo] Iniciando loop ReAct...');
-        console.log(`[Cognitivo] Modelo: ${config_1.config.llmModel}`);
+        console.log(`[Cognitivo] LLM: ${this.llm.name}`);
         console.log(`[Cognitivo] Máximo de iterações: ${config_1.config.maxReactIterations}\n`);
         const steps = [];
         // Primeira mensagem: o AppMap para o LLM analisar
@@ -46,11 +43,8 @@ class ReActAgent {
         });
         for (let i = 1; i <= config_1.config.maxReactIterations; i++) {
             console.log(`\n[Cognitivo] ── Iteração ${i}/${config_1.config.maxReactIterations} ──`);
-            // 1. Chama o LLM
-            const llmResponse = await this.callLLM();
-            const rawText = llmResponse.content[0].type === 'text'
-                ? llmResponse.content[0].text
-                : '';
+            // 1. Chama o LLM (Anthropic ou Ollama, transparente para o loop)
+            const rawText = await this.llm.chat(prompts_1.SYSTEM_PROMPT, this.conversationHistory);
             console.log('[Cognitivo] LLM respondeu:\n', rawText.substring(0, 300), '...');
             // 2. Salva a resposta do assistente no histórico
             this.conversationHistory.push({
@@ -114,23 +108,6 @@ class ReActAgent {
     // ===========================================================
     // Métodos privados
     // ===========================================================
-    /** Faz a chamada à API da Anthropic com Prompt Caching habilitado */
-    async callLLM() {
-        return await this.client.messages.create({
-            model: config_1.config.llmModel,
-            max_tokens: 2048,
-            system: [
-                {
-                    type: 'text',
-                    text: prompts_1.SYSTEM_PROMPT,
-                    // Prompt Caching: o system prompt é estático e será cacheado
-                    // entre iterações, reduzindo custo e latência
-                    cache_control: { type: 'ephemeral' },
-                },
-            ],
-            messages: this.conversationHistory,
-        });
-    }
     /**
      * Parseia a resposta do LLM no formato ReAct.
      *
