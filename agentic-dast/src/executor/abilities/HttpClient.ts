@@ -11,6 +11,22 @@
  */
 
 import axios, { AxiosRequestConfig } from 'axios';
+import { config } from '../../config';
+
+/**
+ * Resolve uma URL que pode vir relativa (ex: "/api/Users") contra a
+ * URL-base do alvo. Necessário porque o LLM, ao gerar make_request,
+ * tipicamente usa paths relativos — sem isso, o axios falha com
+ * "Invalid URL".
+ */
+function resolveUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  try {
+    return new URL(url, config.targetUrl).toString();
+  } catch {
+    return url; // último recurso — deixa o axios reclamar com mensagem clara
+  }
+}
 
 export class HttpClient {
   private defaultHeaders: Record<string, string> = {
@@ -39,11 +55,12 @@ export class HttpClient {
     headers?: Record<string, string>,
     body?: unknown,
   ): Promise<string> {
+    const fullUrl = resolveUrl(url);
     const mergedHeaders = { ...this.defaultHeaders, ...headers };
 
     const axiosConfig: AxiosRequestConfig = {
       method: method.toUpperCase() as AxiosRequestConfig['method'],
-      url,
+      url: fullUrl,
       headers: mergedHeaders,
       data: body !== null && body !== undefined ? body : undefined,
       // Não lança exceção em 4xx/5xx para que o LLM possa analisar
@@ -64,13 +81,13 @@ export class HttpClient {
         : '';
 
       return (
-        `HTTP ${response.status} ${method.toUpperCase()} ${url}\n` +
+        `HTTP ${response.status} ${method.toUpperCase()} ${fullUrl}\n` +
         `Headers de resposta: ${JSON.stringify(response.headers)}\n` +
         `Body:\n${bodyStr}${truncationNote}`
       );
     } catch (err) {
       // Erros de rede (timeout, DNS, conexão recusada)
-      return `ERRO de rede em ${method.toUpperCase()} ${url}: ${(err as Error).message}`;
+      return `ERRO de rede em ${method.toUpperCase()} ${fullUrl}: ${(err as Error).message}`;
     }
   }
 }

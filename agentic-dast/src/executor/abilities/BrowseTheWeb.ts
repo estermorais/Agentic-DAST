@@ -15,6 +15,16 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 import { config } from '../../config';
 
+/** Resolve URL relativa contra o targetUrl (mesmo helper do HttpClient) */
+function resolveUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  try {
+    return new URL(url, config.targetUrl).toString();
+  } catch {
+    return url;
+  }
+}
+
 export class BrowseTheWeb {
   private browser: Browser | null = null;
   private page: Page | null = null;
@@ -54,13 +64,14 @@ export class BrowseTheWeb {
    */
   async navigate(url: string): Promise<string> {
     const page = this.requirePage();
+    const fullUrl = resolveUrl(url);
     try {
-      await page.goto(url, { waitUntil: 'networkidle2' });
+      await page.goto(fullUrl, { waitUntil: 'networkidle2' });
       await this.sleep(500);
       const title = await page.title();
-      return `Navegou para ${url}. Título: "${title}". URL atual: ${page.url()}`;
+      return `Navegou para ${fullUrl}. Título: "${title}". URL atual: ${page.url()}`;
     } catch (err) {
-      return `ERRO ao navegar para ${url}: ${(err as Error).message}`;
+      return `ERRO ao navegar para ${fullUrl}: ${(err as Error).message}`;
     }
   }
 

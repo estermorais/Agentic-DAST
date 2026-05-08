@@ -19,6 +19,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BrowseTheWeb = void 0;
 const puppeteer_1 = __importDefault(require("puppeteer"));
 const config_1 = require("../../config");
+/** Resolve URL relativa contra o targetUrl (mesmo helper do HttpClient) */
+function resolveUrl(url) {
+    if (/^https?:\/\//i.test(url))
+        return url;
+    try {
+        return new URL(url, config_1.config.targetUrl).toString();
+    }
+    catch {
+        return url;
+    }
+}
 class BrowseTheWeb {
     browser = null;
     page = null;
@@ -51,14 +62,15 @@ class BrowseTheWeb {
      */
     async navigate(url) {
         const page = this.requirePage();
+        const fullUrl = resolveUrl(url);
         try {
-            await page.goto(url, { waitUntil: 'networkidle2' });
+            await page.goto(fullUrl, { waitUntil: 'networkidle2' });
             await this.sleep(500);
             const title = await page.title();
-            return `Navegou para ${url}. Título: "${title}". URL atual: ${page.url()}`;
+            return `Navegou para ${fullUrl}. Título: "${title}". URL atual: ${page.url()}`;
         }
         catch (err) {
-            return `ERRO ao navegar para ${url}: ${err.message}`;
+            return `ERRO ao navegar para ${fullUrl}: ${err.message}`;
         }
     }
     /**
