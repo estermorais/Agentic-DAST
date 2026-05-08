@@ -82,11 +82,12 @@ class ZapClient {
                 return [];
             }
             const alerts = response.data?.alerts ?? [];
-            // Filtra alertas de confiança 0 (falsos positivos prováveis)
-            const filtered = alerts.filter((a) => parseInt(a.confidence, 10) > 0);
-            console.log(`[Auditoria] ${alerts.length} alertas ZAP recebidos. ` +
-                `${filtered.length} após filtro de confiança.`);
-            return filtered.map((a) => this.zapAlertToFinding(a));
+            // Filtro removido: a triagem por relevância acontece na fase de
+            // classificação (evaluation/classify.ts), que casa por keyword e
+            // categoria. Cortar aqui por confidence = 0 estava descartando 100%
+            // dos alertas em algumas configurações do ZAP.
+            console.log(`[Auditoria] ${alerts.length} alerta(s) ZAP recebido(s).`);
+            return alerts.map((a) => this.zapAlertToFinding(a));
         }
         catch (err) {
             console.warn(`[Auditoria] ZAP inacessível ou sem alertas passivos: ${err.message}`);

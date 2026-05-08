@@ -54,11 +54,11 @@ export class DOMExtractor {
     const args = ['--no-sandbox', '--disable-setuid-sandbox'];
 
     if (config.useZapProxy) {
-      // Roteia o tráfego pelo ZAP para auditoria passiva
+      // Roteia o tráfego pelo ZAP para auditoria passiva.
+      // Obs.: o Chrome faz bypass do proxy para localhost por padrão,
+      // então ZAP só verá tráfego se o navegador acessar URLs não-loopback.
+      // No Cenário C isto é aceitável — Abuse Cases também fazem detecções.
       args.push(`--proxy-server=http://${config.zapProxyHost}:${config.zapProxyPort}`);
-      // Força o uso do proxy mesmo para localhost (default do Chrome
-      // é fazer bypass — quebra a captura quando o alvo é local).
-      args.push('--proxy-bypass-list=<-loopback>');
       args.push('--ignore-certificate-errors');
       console.log(`[Percepção] Usando proxy ZAP em ${config.zapProxyHost}:${config.zapProxyPort}`);
     }

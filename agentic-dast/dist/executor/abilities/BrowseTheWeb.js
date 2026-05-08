@@ -46,9 +46,8 @@ class BrowseTheWeb {
         const args = ['--no-sandbox', '--disable-setuid-sandbox'];
         if (config_1.config.useZapProxy) {
             args.push(`--proxy-server=http://${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`);
-            // Força o Chrome a usar o proxy mesmo para URLs localhost/127.0.0.1
-            // (sem isso, ZAP não captura tráfego para o Juice Shop local)
-            args.push('--proxy-bypass-list=<-loopback>');
+            // Obs.: Chrome faz bypass do proxy para localhost por padrão.
+            // Para o Cenário C tudo bem — os Abuse Cases fazem as detecções.
             args.push('--ignore-certificate-errors');
             console.log(`[Executor] Proxy ZAP ativo em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`);
         }

@@ -181,7 +181,13 @@ async function main(): Promise<void> {
 
   const startTime = Date.now();
   const zapClient = new ZapClient();
-  const targetUrl = config.targetUrl;
+  // No Cenário B, o browser usa a URL interna do ZAP (juice-shop:3000)
+  // porque todo o tráfego passa pelo proxy ZAP e quem resolve o hostname
+  // é o próprio ZAP (que está na Docker network 'dast-net'). Se usássemos
+  // 'localhost', ZAP receberia a request mas não conseguiria resolver
+  // 'localhost' como Juice Shop dentro do contêiner.
+  const targetUrl    = config.zapTargetUrl;     // navegação via proxy
+  const reportTargetUrl = config.targetUrl;     // URL exibida no relatório
   let browser: Browser | null = null;
 
   try {
@@ -251,7 +257,7 @@ async function main(): Promise<void> {
       description:   'ZAP + roteiro E2E de navegação humana + scan ativo',
       generatedAt:   new Date().toISOString(),
       durationMs:    Date.now() - startTime,
-      targetUrl,
+      targetUrl:     reportTargetUrl,  // URL canônica do alvo no host
       findingsCount: allFindings.length,
       findings:      allFindings,
     };
