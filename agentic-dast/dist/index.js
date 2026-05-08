@@ -81,10 +81,16 @@ async function main() {
         const agent = new ReActAgent_1.ReActAgent(dispatcher);
         const result = await agent.run(appMap);
         // ── Fase 3b: Abuse Cases predefinidos ──────────────────
+        // Rodam sempre, mesmo sem JWT — a maioria dos casos testa
+        // endpoints públicos (FTP, SQL injection no login, /api/Users
+        // sem auth, etc.). Casos que dependem de JWT (IDOR, basket)
+        // simplesmente retornarão null sem causar erro.
         console.log('[ FASE 3b ] Abuse Cases — testes estruturados...');
-        const abuseFingdings = appMap.auth.jwt
-            ? await (0, runner_1.runAbuseCases)(appMap.auth.jwt, config_1.config.targetUrl)
-            : [];
+        if (!appMap.auth.jwt) {
+            console.log('[ FASE 3b ] Aviso: JWT não foi capturado pelo DOMExtractor. ' +
+                'Casos que dependem de autenticação (IDOR, basket) serão limitados.');
+        }
+        const abuseFingdings = await (0, runner_1.runAbuseCases)(appMap.auth.jwt ?? '', config_1.config.targetUrl);
         // ── Fase 3c: Alertas ZAP (scan passivo) ────────────────
         console.log('[ FASE 3c ] Auditoria — coletando alertas ZAP...\n');
         const zapFindings = await zapClient.getPassiveAlerts(config_1.config.targetUrl);
