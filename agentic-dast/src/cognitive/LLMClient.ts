@@ -94,10 +94,11 @@ class OllamaClient implements LLMClient {
             ...history,
           ],
           options: {
-            // Janela de contexto: 32K para acomodar AppMap completo + histórico
-            // (Qwen 2.5 suporta até 128K; 32K cobre casos reais com folga)
-            num_ctx: 32768,
-            // Temperatura padrão (mantém variabilidade similar ao Claude)
+            // Janela de contexto: 16K — balanço entre acomodar AppMap +
+            // histórico do loop ReAct (~10-12K) e não estourar RAM em
+            // máquinas com 8 GB. Qwen 2.5 e Llama 3.2 suportam até 128K
+            // mas o KV-cache cresce linearmente com num_ctx.
+            num_ctx: 16384,
             temperature: 1.0,
           },
         },
