@@ -4,13 +4,13 @@
   "description": "Framework agentico para deteccao de vulnerabilidades de logica de negocio em SPAs",
   "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node src/index.ts",
-    "scenario:a": "ts-node src/scenarios/scenario-a.ts",
-    "scenario:b": "ts-node src/scenarios/scenario-b.ts",
-    "scenario:c": "ts-node src/index.ts",
-    "evaluate": "ts-node src/evaluation/evaluate.ts",
+    "start": "node dist/index.js",
+    "scenario:a": "node dist/scenarios/scenario-a.js",
+    "scenario:b": "node dist/scenarios/scenario-b.js",
+    "scenario:c": "node dist/index.js",
+    "evaluate": "node dist/evaluation/evaluate.js",
     "build": "tsc && node -e \"require('fs').copyFileSync('src/evaluation/ground-truth.json', 'dist/evaluation/ground-truth.json')\"",
-    "dev": "ts-node --watch src/index.ts"
+    "dev": "tsc --watch"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
