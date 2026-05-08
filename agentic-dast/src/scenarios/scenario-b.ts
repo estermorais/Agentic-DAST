@@ -214,6 +214,11 @@ async function main(): Promise<void> {
     console.log('[ ETAPA 3 ] Browser encerrado.\n');
 
     // ── Etapa 4: Alertas passivos do ZAP ─────────────────────
+    // Aguarda o ZAP terminar de processar passivamente todas as
+    // requisições que passaram pelo proxy durante a navegação.
+    // Sem essa pausa, alertas mais lentos podem ficar de fora.
+    console.log('[ ETAPA 4 ] Aguardando ZAP processar tráfego (15s)...');
+    await sleep(15_000);
     console.log('[ ETAPA 4 ] Coletando alertas passivos do ZAP...\n');
     const passiveFindings = await zapClient.getPassiveAlerts(targetUrl);
 

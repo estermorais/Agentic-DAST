@@ -54,20 +54,48 @@ export class ZapClient {
    *
    * Filtra alertas de baixíssima confiança (False Positive provável).
    */
+  /**
+   * Diagnóstico: retorna quantas mensagens HTTP o ZAP capturou.
+   * Útil para confirmar que o proxy está realmente recebendo tráfego.
+   */
+  async getMessageCount(): Promise<number> {
+    try {
+      const response = await axios.get(`${this.baseUrl}/JSON/core/view/numberOfMessages/`, {
+        params: { apikey: this.apiKey },
+        timeout: 5_000,
+        validateStatus: () => true,
+      });
+      return parseInt(response.data?.numberOfMessages ?? '0', 10);
+    } catch {
+      return 0;
+    }
+  }
+
   async getPassiveAlerts(targetBaseUrl: string): Promise<Finding[]> {
     console.log('[Auditoria] Consultando alertas passivos do ZAP...');
 
+    // Diagnóstico: confirma que o ZAP viu tráfego
+    const msgCount = await this.getMessageCount();
+    console.log(`[Auditoria] ZAP capturou ${msgCount} mensagem(ns) HTTP.`);
+
     try {
+      // Não filtramos por baseurl: o ZAP rodando em contêiner pode ter
+      // registrado alertas com URLs internas (juice-shop:3000) que não
+      // casam com a baseurl externa (localhost:3000). Sem filtro,
+      // pegamos todos os alertas e o filtro fica a cargo da fase de
+      // classificação (que casa por keyword no título).
       const response = await axios.get(`${this.baseUrl}/JSON/alert/view/alerts/`, {
         params: {
-          baseurl: targetBaseUrl,
-          apikey:  this.apiKey,
-          start:   0,
-          count:   500,
+          apikey: this.apiKey,
+          start:  0,
+          count:  500,
         },
         timeout: 15_000,
         validateStatus: () => true,
       });
+
+      // Sinaliza ao caller qual URL foi solicitada (apenas para log)
+      void targetBaseUrl;
 
       if (response.status !== 200) {
         console.warn(`[Auditoria] ZAP respondeu HTTP ${response.status}. Sem alertas.`);
