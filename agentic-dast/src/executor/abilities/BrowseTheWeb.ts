@@ -44,6 +44,9 @@ export class BrowseTheWeb {
 
     if (config.useZapProxy) {
       args.push(`--proxy-server=http://${config.zapProxyHost}:${config.zapProxyPort}`);
+      // Força o Chrome a usar o proxy mesmo para URLs localhost/127.0.0.1
+      // (sem isso, ZAP não captura tráfego para o Juice Shop local)
+      args.push('--proxy-bypass-list=<-loopback>');
       args.push('--ignore-certificate-errors');
       console.log(`[Executor] Proxy ZAP ativo em ${config.zapProxyHost}:${config.zapProxyPort}`);
     }

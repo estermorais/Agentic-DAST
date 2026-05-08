@@ -30,14 +30,17 @@ async function main(): Promise<void> {
   console.log('║    CENÁRIO A — ZAP SPIDER TRADICIONAL    ║');
   console.log('╚══════════════════════════════════════════╝\n');
 
-  const startTime  = Date.now();
-  const zapClient  = new ZapClient();
-  const targetUrl  = config.targetUrl;
+  const startTime    = Date.now();
+  const zapClient    = new ZapClient();
+  const targetUrl    = config.targetUrl;        // URL externa (relatório)
+  const zapTargetUrl = config.zapTargetUrl;     // URL interna ZAP→juice-shop
+
+  console.log(`[Cenário A] URL alvo (interna do ZAP): ${zapTargetUrl}\n`);
 
   // ── Etapa 1: Spider ──────────────────────────────────────
   console.log('[ ETAPA 1 ] Spider tradicional...\n');
 
-  const spiderId = await zapClient.startSpider(targetUrl);
+  const spiderId = await zapClient.startSpider(zapTargetUrl);
   if (spiderId) {
     await zapClient.waitForSpiderCompletion(spiderId, 300_000);
   } else {
@@ -47,7 +50,7 @@ async function main(): Promise<void> {
   // ── Etapa 2: Scan Ativo ──────────────────────────────────
   console.log('\n[ ETAPA 2 ] Scan ativo...\n');
 
-  const scanId = await zapClient.startActiveScan(targetUrl);
+  const scanId = await zapClient.startActiveScan(zapTargetUrl);
   if (scanId) {
     await zapClient.waitForScanCompletion(scanId, 600_000);
   } else {
@@ -56,7 +59,7 @@ async function main(): Promise<void> {
 
   // ── Etapa 3: Coleta de Alertas ───────────────────────────
   console.log('\n[ ETAPA 3 ] Coletando alertas do ZAP...\n');
-  const findings = await zapClient.getPassiveAlerts(targetUrl);
+  const findings = await zapClient.getPassiveAlerts(zapTargetUrl);
 
   // ── Etapa 4: Relatório ───────────────────────────────────
   const report = {

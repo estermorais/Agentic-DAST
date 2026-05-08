@@ -169,6 +169,10 @@ async function main() {
             headless: true,
             args: [
                 `--proxy-server=http://${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`,
+                // CRÍTICO: por padrão o Chrome NÃO usa proxy para localhost/127.0.0.1
+                // (otimização de segurança). Sem essa flag, todo o tráfego para o
+                // Juice Shop em localhost pula o ZAP e ele não captura nada.
+                '--proxy-bypass-list=<-loopback>',
                 '--ignore-certificate-errors',
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -194,12 +198,14 @@ async function main() {
         console.log('[ ETAPA 4 ] Coletando alertas passivos do ZAP...\n');
         const passiveFindings = await zapClient.getPassiveAlerts(targetUrl);
         // ── Etapa 5: Scan ativo nas URLs visitadas ────────────────
+        // Usa a URL interna ZAP→juice-shop (não localhost) porque a chamada
+        // é executada de dentro do contêiner ZAP.
         console.log('[ ETAPA 5 ] Iniciando scan ativo...\n');
-        const scanId = await zapClient.startActiveScan(targetUrl);
+        const scanId = await zapClient.startActiveScan(config_1.config.zapTargetUrl);
         if (scanId) {
             await zapClient.waitForScanCompletion(scanId, 600_000);
         }
-        const activeFindings = await zapClient.getActiveScanAlerts(targetUrl);
+        const activeFindings = await zapClient.getActiveScanAlerts(config_1.config.zapTargetUrl);
         // Deduplicação simples por título
         const seen = new Set();
         const allFindings = [...passiveFindings, ...activeFindings].filter((f) => {

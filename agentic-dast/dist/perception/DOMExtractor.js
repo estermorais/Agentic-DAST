@@ -52,6 +52,9 @@ class DOMExtractor {
         if (config_1.config.useZapProxy) {
             // Roteia o tráfego pelo ZAP para auditoria passiva
             args.push(`--proxy-server=http://${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`);
+            // Força o uso do proxy mesmo para localhost (default do Chrome
+            // é fazer bypass — quebra a captura quando o alvo é local).
+            args.push('--proxy-bypass-list=<-loopback>');
             args.push('--ignore-certificate-errors');
             console.log(`[Percepção] Usando proxy ZAP em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`);
         }

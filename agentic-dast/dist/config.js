@@ -69,7 +69,12 @@ exports.config = {
     ollamaUrl: optional('OLLAMA_URL', 'http://localhost:11434'),
     ollamaModel: optional('OLLAMA_MODEL', 'qwen2.5:7b'),
     // ── Alvo ───────────────────────────────────────────────────
+    // URL do alvo do ponto de vista do HOST (browser, agente, axios)
     targetUrl: optional('TARGET_URL', 'http://localhost:3000'),
+    // URL do alvo do ponto de vista do CONTÊINER ZAP — necessária porque
+    // 'localhost' dentro do container ZAP é ele próprio, não o Juice Shop.
+    // O nome 'juice-shop' resolve via Docker network 'dast-net'.
+    zapTargetUrl: optional('ZAP_TARGET_URL', 'http://juice-shop:3000'),
     // ── ZAP ────────────────────────────────────────────────────
     zapApiUrl: optional('ZAP_API_URL', 'http://localhost:8080'),
     zapApiKey: optional('ZAP_API_KEY', 'zapkey123'),
