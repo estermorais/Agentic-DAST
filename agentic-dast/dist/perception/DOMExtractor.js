@@ -19,7 +19,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DOMExtractor = void 0;
 const puppeteer_1 = __importDefault(require("puppeteer"));
+const axios_1 = __importDefault(require("axios"));
 const config_1 = require("../config");
+// Credenciais de usuários default do Juice Shop (vem pré-criados na imagem
+// bkimminich/juice-shop:latest). Tentadas em ordem; o primeiro que autenticar
+// é usado. Se nenhum funcionar, cai para login via browser.
+const DEFAULT_USERS = [
+    { email: 'jim@juice-sh.op', password: 'ncc-1701' },
+    { email: 'bender@juice-sh.op', password: 'OhG0dPlease1nsertLiquor!' },
+    { email: 'admin@juice-sh.op', password: 'admin123' },
+];
 // Rotas do Juice Shop que o extrator vai visitar.
 // São as rotas Angular (hash routing: /#/...)
 const JUICE_SHOP_ROUTES = [
@@ -233,94 +242,85 @@ class DOMExtractor {
      * (criado automaticamente)
      */
     async collectAuthTokens() {
+        // ── Estratégia 1: Login via API direta ─────────────────────
+        // Mais rápida e confiável que browser. Tenta cada usuário default
+        // do Juice Shop até um autenticar.
+        for (const user of DEFAULT_USERS) {
+            try {
+                const response = await axios_1.default.post(`${config_1.config.targetUrl}/rest/user/login`, { email: user.email, password: user.password }, { timeout: 10_000, validateStatus: () => true });
+                const jwt = response.data?.authentication?.token;
+                if (response.status === 200 && typeof jwt === 'string' && jwt.length > 0) {
+                    console.log(`[Percepção] Auth coletado via API. ` +
+                        `Usuário: ${user.email} | JWT: ${jwt.substring(0, 20)}...`);
+                    return {
+                        jwt,
+                        bearerToken: `Bearer ${jwt}`,
+                        cookies: {},
+                        userEmail: user.email,
+                    };
+                }
+            }
+            catch {
+                // tenta o próximo usuário
+            }
+        }
+        // ── Estratégia 2: Login via browser (fallback) ─────────────
+        // Se a API não respondeu (ex: endpoint mudou), tenta automatizar
+        // o formulário Angular como último recurso.
+        console.warn('[Percepção] Login via API falhou para todos os usuários default. Tentando via browser...');
         const page = await this.browser.newPage();
         await this.enableNetworkInterception(page);
         let jwt;
-        // Escuta respostas de login para capturar o JWT
         page.on('response', async (response) => {
             if (response.url().includes('/rest/user/login') && response.status() === 200) {
                 try {
                     const body = await response.json();
                     jwt = body?.authentication?.token;
                 }
-                catch {
-                    // ignora
-                }
+                catch { /* ignora */ }
             }
         });
         try {
-            // 1. Visita a home primeiro para capturar banners persistentes
-            await page.goto(`${config_1.config.targetUrl}/#/`, {
-                waitUntil: 'networkidle2',
-                timeout: 15_000,
-            });
-            await this.sleep(1500);
-            // 2. Dismissa o welcome banner (versões recentes do Juice Shop o exibem
-            //    no primeiro acesso e ele intercepta cliques no formulário)
-            await page.evaluate(() => {
-                document.querySelectorAll('button[aria-label="Close Welcome Banner"], ' +
-                    'button[aria-label="dismiss cookie message"], ' +
-                    'button.close-dialog, ' +
-                    'button.mat-button').forEach((btn) => {
-                    if (/dismiss|close/i.test(btn.textContent ?? '') ||
-                        btn.getAttribute('aria-label')?.toLowerCase().includes('close')) {
-                        btn.click();
-                    }
-                });
-            }).catch(() => { });
-            await this.sleep(500);
-            // 3. Vai para a tela de login
             await page.goto(`${config_1.config.targetUrl}/#/login`, {
                 waitUntil: 'networkidle2',
                 timeout: 15_000,
             });
             await this.sleep(1500);
-            // 4. Preenche e submete (com tolerância a falha de seletor)
             try {
-                await page.type('#email', 'customer@juice-sh.op', { delay: 30 });
-                await page.type('#password', 'customer', { delay: 30 });
-                await this.sleep(300);
+                await page.type('#email', DEFAULT_USERS[0].email, { delay: 30 });
+                await page.type('#password', DEFAULT_USERS[0].password, { delay: 30 });
                 await page.click('#loginButton');
             }
             catch (err) {
                 console.warn(`[Percepção] Falha ao preencher login: ${err.message}`);
             }
             await this.sleep(3000);
-            // 5. Tenta capturar o JWT por múltiplas estratégias
             if (!jwt) {
                 jwt = await page.evaluate(() => {
-                    // Estratégia A: localStorage.token (versão antiga e atual)
-                    const fromToken = localStorage.getItem('token');
-                    if (fromToken)
-                        return fromToken;
-                    // Estratégia B: localStorage com chave que contenha 'token' ou 'auth'
+                    const t = localStorage.getItem('token');
+                    if (t)
+                        return t;
                     for (let i = 0; i < localStorage.length; i++) {
                         const key = localStorage.key(i);
                         if (key && /token|auth|jwt/i.test(key)) {
                             const v = localStorage.getItem(key);
                             if (v && v.includes('.'))
-                                return v; // JWT contém '.'
+                                return v;
                         }
                     }
-                    // Estratégia C: cookie 'token'
-                    const match = document.cookie.match(/token=([^;]+)/);
-                    if (match)
-                        return match[1];
                     return undefined;
                 });
             }
-            // Coleta cookies da sessão
             const puppeteerCookies = await page.cookies();
             const cookies = {};
-            for (const c of puppeteerCookies) {
+            for (const c of puppeteerCookies)
                 cookies[c.name] = c.value;
-            }
-            console.log(`[Percepção] Auth coletado. JWT: ${jwt ? 'sim (' + jwt.substring(0, 20) + '...)' : 'não encontrado'}`);
+            console.log(`[Percepção] Auth coletado via browser. JWT: ${jwt ? 'sim' : 'não encontrado'}`);
             return {
                 jwt,
                 bearerToken: jwt ? `Bearer ${jwt}` : undefined,
                 cookies,
-                userEmail: 'customer@juice-sh.op',
+                userEmail: DEFAULT_USERS[0].email,
             };
         }
         finally {
