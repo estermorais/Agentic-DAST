@@ -1,11 +1,10 @@
 # =============================================================
 # Agentic DAST — Ambiente Docker
-# Três containers:
+# Dois containers:
 #   1. juice-shop  → alvo da análise (Angular SPA)
 #   2. zap         → proxy/scanner OWASP ZAP
-#   3. agent       → o agente em Node.js (opcional — pode rodar local)
+# (o agente Node.js roda local, não em container)
 # =============================================================
-version: '3.8'
 
 services:
 
