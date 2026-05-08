@@ -72,7 +72,7 @@ class ZapClient {
                     start: 0,
                     count: 500,
                 },
-                timeout: 15_000,
+                timeout: 60_000,
                 validateStatus: () => true,
             });
             // Sinaliza ao caller qual URL foi solicitada (apenas para log)
@@ -117,7 +117,7 @@ class ZapClient {
                     method: '',
                     postData: '',
                 },
-                timeout: 10_000,
+                timeout: 30_000,
                 validateStatus: () => true,
             });
             const scanId = response.data?.scan;
@@ -153,7 +153,7 @@ class ZapClient {
                     contextName: '',
                     subtreeOnly: false,
                 },
-                timeout: 10_000,
+                timeout: 30_000,
                 validateStatus: () => true,
             });
             const scanId = response.data?.scan;

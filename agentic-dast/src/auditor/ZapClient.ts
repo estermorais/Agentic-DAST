@@ -90,7 +90,7 @@ export class ZapClient {
           start:  0,
           count:  500,
         },
-        timeout: 15_000,
+        timeout: 60_000,
         validateStatus: () => true,
       });
 
@@ -145,7 +145,7 @@ export class ZapClient {
           method:        '',
           postData:      '',
         },
-        timeout: 10_000,
+        timeout: 30_000,
         validateStatus: () => true,
       });
 
@@ -186,7 +186,7 @@ export class ZapClient {
           contextName: '',
           subtreeOnly: false,
         },
-        timeout: 10_000,
+        timeout: 30_000,
         validateStatus: () => true,
       });
 
