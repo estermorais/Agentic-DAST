@@ -54,8 +54,17 @@ class ReActAgent {
             // 3. Parseia Thought + Action do texto
             const parsed = this.parseReActOutput(rawText);
             if (!parsed) {
+                // O LLM não seguiu o formato ReAct. Comum em modelos pequenos
+                // (Llama 3B etc.). Encerra graciosamente em vez de "limite atingido".
                 console.warn('[Cognitivo] Não foi possível parsear a resposta. Encerrando.');
-                break;
+                return {
+                    findings: this.dispatcher.getFindings(),
+                    steps,
+                    totalIterations: i,
+                    finishedCleanly: false,
+                    summary: `Parser falhou na iteração ${i}. O modelo (${this.llm.name}) ` +
+                        `pode estar gerando saída fora do formato ReAct esperado.`,
+                };
             }
             console.log(`[Cognitivo] Thought: ${parsed.thought.substring(0, 150)}...`);
             console.log(`[Cognitivo] Action: ${parsed.action.action}`);
