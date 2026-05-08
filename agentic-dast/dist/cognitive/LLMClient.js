@@ -79,7 +79,11 @@ class OllamaClient {
                     temperature: 1.0,
                 },
             }, {
-                timeout: 180_000,
+                // 10 minutos: a 1ª chamada inclui carga do modelo na RAM (~30-90s
+                // no Windows + CPU) e cada inferência subsequente pode levar 30-120s
+                // dependendo do tamanho do histórico. Com Claude esse timeout seria
+                // 30s, mas Ollama local em CPU é bem mais lento.
+                timeout: 600_000,
                 // Não rejeita automaticamente em status >= 400 — deixa a gente
                 // extrair a mensagem de erro do corpo da resposta
                 validateStatus: () => true,
