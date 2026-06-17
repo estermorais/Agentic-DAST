@@ -1,12 +1,13 @@
 /**
  * scenarios/report.ts
  * ---------------------------------------------------------------
- * Formato de relatório compartilhado entre os três cenários do
+ * Formato de relatório compartilhado entre os quatro cenários do
  * experimento comparativo:
  *
  *   Cenário A — ZAP spider + scan ativo (baseline automático)
  *   Cenário B — E2E Puppeteer + ZAP passivo (baseline guiado)
  *   Cenário C — Agentic DAST autônomo (experimental)
+ *   Cenário D — PentestGPT (controle de LLM generalista)
  *
  * Todos os cenários produzem o mesmo JSON, permitindo comparação
  * direta de Precision, Recall e F1-Score por categoria.
@@ -18,7 +19,7 @@ import * as path from 'path';
 import { Finding } from '../executor/ActionDispatcher';
 
 export interface ScenarioReport {
-  scenario:       'A' | 'B' | 'C';
+  scenario:       'A' | 'B' | 'C' | 'D';
   description:    string;
   generatedAt:    string;
   durationMs:     number;

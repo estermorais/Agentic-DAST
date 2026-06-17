@@ -8,8 +8,9 @@
     "scenario:a": "node dist/scenarios/scenario-a.js",
     "scenario:b": "node dist/scenarios/scenario-b.js",
     "scenario:c": "node dist/index.js",
+    "scenario:d": "node dist/scenarios/scenario-d.js",
     "evaluate": "node dist/evaluation/evaluate.js",
-    "build": "tsc && node -e \"require('fs').copyFileSync('src/evaluation/ground-truth.json', 'dist/evaluation/ground-truth.json')\"",
+    "build": "tsc && node -e \"require('fs').copyFileSync('src/evaluation/ground-truth.json', 'dist/evaluation/ground-truth.json'); require('fs').mkdirSync('dist/scenarios/pentestgpt', { recursive: true }); require('fs').copyFileSync('src/scenarios/pentestgpt/run_pentestgpt.py', 'dist/scenarios/pentestgpt/run_pentestgpt.py')\"",
     "dev": "tsc --watch"
   },
   "dependencies": {
