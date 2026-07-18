@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
+    "test:llm": "node dist/scripts/test-llm.js",
     "scenario:a": "node dist/scenarios/scenario-a.js",
     "scenario:b": "node dist/scenarios/scenario-b.js",
     "scenario:c": "node dist/index.js",

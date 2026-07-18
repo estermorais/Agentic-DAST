@@ -3,12 +3,15 @@
  * ---------------------------------------------------------------
  * Abstração mínima sobre o provedor de LLM.
  *
- * Permite alternar entre dois back-ends sem mexer no ReActAgent:
+ * Permite alternar entre três back-ends sem mexer no ReActAgent:
+ *   • OpenRouterClient → proxy que dá acesso a Claude, GPT-4 e outros
+ *                        com uma única chave (formato compatível OpenAI)
  *   • AnthropicClient  → API da Anthropic (Claude), com Prompt Caching
  *   • OllamaClient     → modelo local servido pelo Ollama (free)
  *
  * Seleção via variável de ambiente:
- *   LLM_PROVIDER=anthropic   (default — usado nos experimentos finais)
+ *   LLM_PROVIDER=openrouter  (default — experimentos finais)
+ *   LLM_PROVIDER=anthropic   (chamada direta à API da Anthropic)
  *   LLM_PROVIDER=ollama      (smoke tests sem custo)
  * ---------------------------------------------------------------
  */
@@ -35,7 +38,80 @@ export interface LLMClient {
 }
 
 // ===========================================================
-// Implementação 1: Anthropic (Claude)
+// Implementação 1: OpenRouter (proxy multi-provedor)
+// ===========================================================
+// A API do OpenRouter é compatível com o formato /chat/completions
+// do OpenAI, então usamos axios diretamente em vez de instalar
+// mais uma SDK. Uma única chave dá acesso a modelos da Anthropic,
+// OpenAI, Google, Meta e outros — o modelo é escolhido pelo campo
+// 'model' no corpo da requisição (ex.: 'anthropic/claude-haiku-4.5').
+
+class OpenRouterClient implements LLMClient {
+  readonly name: string;
+  private readonly apiKey: string;
+  private readonly model:  string;
+  private readonly baseUrl: string;
+
+  constructor() {
+    this.apiKey  = config.openrouterApiKey;
+    this.model   = config.openrouterModel;
+    this.baseUrl = config.openrouterUrl;
+    this.name    = `openrouter/${this.model}`;
+  }
+
+  async chat(systemPrompt: string, history: ChatMessage[]): Promise<string> {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/chat/completions`,
+        {
+          model: this.model,
+          max_tokens: 2048,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history,
+          ],
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type':  'application/json',
+            // Identificação da aplicação (recomendado pelo OpenRouter
+            // para aparecer no dashboard de uso — não é obrigatório)
+            'HTTP-Referer':  'https://github.com/estermorais/Agentic-DAST',
+            'X-Title':       'Agentic DAST (TCC CEFET-MG)',
+          },
+          timeout: 120_000,
+          validateStatus: () => true,
+        },
+      );
+
+      if (response.status >= 400) {
+        const errMsg = response.data?.error?.message
+          ?? JSON.stringify(response.data).substring(0, 500);
+        throw new Error(`OpenRouter HTTP ${response.status}: ${errMsg}`);
+      }
+
+      const content = response.data?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string') {
+        throw new Error(
+          `OpenRouter retornou resposta inesperada: ${JSON.stringify(response.data).substring(0, 500)}`,
+        );
+      }
+      return content;
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response) {
+        const data = err.response.data;
+        const errMsg = (data as { error?: { message?: string } })?.error?.message
+          ?? JSON.stringify(data).substring(0, 500);
+        throw new Error(`OpenRouter HTTP ${err.response.status}: ${errMsg}`);
+      }
+      throw err;
+    }
+  }
+}
+
+// ===========================================================
+// Implementação 2: Anthropic (Claude, chamada direta)
 // ===========================================================
 
 class AnthropicClient implements LLMClient {
@@ -68,7 +144,7 @@ class AnthropicClient implements LLMClient {
 }
 
 // ===========================================================
-// Implementação 2: Ollama (LLM local — free)
+// Implementação 3: Ollama (LLM local — free)
 // ===========================================================
 
 class OllamaClient implements LLMClient {
@@ -149,13 +225,16 @@ class OllamaClient implements LLMClient {
  */
 export function createLLMClient(): LLMClient {
   switch (config.llmProvider) {
-    case 'ollama':
-      return new OllamaClient();
+    case 'openrouter':
+      return new OpenRouterClient();
     case 'anthropic':
       return new AnthropicClient();
+    case 'ollama':
+      return new OllamaClient();
     default:
       throw new Error(
-        `LLM_PROVIDER desconhecido: "${config.llmProvider}". Use "anthropic" ou "ollama".`,
+        `LLM_PROVIDER desconhecido: "${config.llmProvider}". ` +
+        `Use "openrouter", "anthropic" ou "ollama".`,
       );
   }
 }

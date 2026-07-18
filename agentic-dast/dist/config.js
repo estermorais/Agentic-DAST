@@ -54,13 +54,24 @@ function optional(key, defaultValue) {
     return process.env[key] ?? defaultValue;
 }
 // Provedor de LLM
-const llmProvider = optional('LLM_PROVIDER', 'anthropic');
+const llmProvider = optional('LLM_PROVIDER', 'openrouter');
 exports.config = {
     // ── Provedor de LLM ────────────────────────────────────────
-    // Aceita: 'anthropic' (default, experimentos finais) ou 'ollama' (smoke tests)
+    // Aceita:
+    //   'openrouter' (default, proxy que dá acesso a Claude, GPT-4, etc.
+    //                 com uma única chave — usado nos experimentos finais)
+    //   'anthropic'  (chamada direta à API da Anthropic, requer conta paga)
+    //   'ollama'     (LLM local, smoke tests sem custo)
     llmProvider,
-    // ── Anthropic ──────────────────────────────────────────────
-    // anthropicApiKey é obrigatório APENAS quando llmProvider === 'anthropic'
+    // ── OpenRouter ─────────────────────────────────────────────
+    // Proxy que expõe Claude, GPT-4, Gemini e outros com API compatível
+    // com o formato OpenAI. Chave obtida em https://openrouter.ai/keys
+    openrouterApiKey: llmProvider === 'openrouter'
+        ? required('OPENROUTER_API_KEY')
+        : optional('OPENROUTER_API_KEY', ''),
+    openrouterModel: optional('OPENROUTER_MODEL', 'anthropic/claude-haiku-4.5'),
+    openrouterUrl: optional('OPENROUTER_URL', 'https://openrouter.ai/api/v1'),
+    // ── Anthropic (chamada direta, alternativa ao OpenRouter) ──
     anthropicApiKey: llmProvider === 'anthropic'
         ? required('ANTHROPIC_API_KEY')
         : optional('ANTHROPIC_API_KEY', ''),
