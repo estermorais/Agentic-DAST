@@ -90,7 +90,7 @@ exports.config = {
     zapApiUrl: optional('ZAP_API_URL', 'http://localhost:8080'),
     zapApiKey: optional('ZAP_API_KEY', 'zapkey123'),
     zapProxyHost: optional('ZAP_PROXY_HOST', 'localhost'),
-    zapProxyPort: parseInt(optional('ZAP_PROXY_PORT', '8888')),
+    zapProxyPort: parseInt(optional('ZAP_PROXY_PORT', '8080')),
     // ── Comportamento do agente ────────────────────────────────
     maxReactIterations: parseInt(optional('MAX_REACT_ITERATIONS', '25')),
     useZapProxy: optional('USE_ZAP_PROXY', 'true') === 'true',
