@@ -22,8 +22,9 @@ services:
 
   # -------------------------------------------------------
   # Scanner: OWASP ZAP (modo daemon)
-  # API REST: http://localhost:8080
-  # Proxy HTTP:  localhost:8888
+  # No modo daemon o ZAP atende API REST e proxy HTTP na
+  # mesma porta definida por -host/-port.
+  # Endpoint unico: http://localhost:8080
   # -------------------------------------------------------
   zap:
     image: ghcr.io/zaproxy/zaproxy:stable
@@ -35,11 +36,8 @@ services:
       -config api.addrs.addr.name=.*
       -config api.addrs.addr.regex=true
       -config api.key=${ZAP_API_KEY:-zapkey123}
-      -config proxy.port=8888
-      -config proxy.host=0.0.0.0
     ports:
-      - "8080:8080"   # API REST do ZAP
-      - "8888:8888"   # Proxy HTTP (Puppeteer roteia tráfego por aqui)
+      - "8080:8080"   # API REST + Proxy HTTP (mesmo listener)
     networks:
       - dast-net
 
