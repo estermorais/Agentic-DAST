@@ -55,17 +55,20 @@ class DOMExtractor {
             // faria o ZAP não ver nada. Duas flags corrigem isso:
             //   1. --proxy-bypass-list=<-loopback>: força o Chrome a rotear
             //      inclusive localhost pelo proxy (não fazer bypass).
-            //   2. --host-resolver-rules=MAP localhost host.docker.internal:
-            //      reescreve 'localhost' para 'host.docker.internal' antes de
-            //      enviar a requisição ao proxy. Isso é necessário porque, do
-            //      ponto de vista do ZAP dentro do container, 'localhost' é o
-            //      próprio ZAP, não o Juice Shop. 'host.docker.internal' é o
-            //      alias que Docker Desktop provê para acessar o host.
+            //   2. --host-resolver-rules=MAP localhost <alvo-interno>:
+            //      reescreve 'localhost' para o nome de host que o ZAP
+            //      dentro do container consegue resolver via Docker network.
+            //      Do ponto de vista do container do ZAP, 'localhost' é o
+            //      próprio ZAP, não o alvo. Usar o hostname interno
+            //      (extraído de ZAP_TARGET_URL, por padrão 'juice-shop')
+            //      permite ao ZAP resolver e atingir o alvo pela rede
+            //      compartilhada 'dast-net' do docker-compose.
+            const zapTargetHost = new URL(config_1.config.zapTargetUrl).hostname;
             args.push(`--proxy-server=http://${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`);
             args.push('--proxy-bypass-list=<-loopback>');
-            args.push('--host-resolver-rules=MAP localhost host.docker.internal');
+            args.push(`--host-resolver-rules=MAP localhost ${zapTargetHost}`);
             args.push('--ignore-certificate-errors');
-            console.log(`[Percepção] Usando proxy ZAP em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort} (localhost -> host.docker.internal)`);
+            console.log(`[Percepção] Usando proxy ZAP em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort} (localhost -> ${zapTargetHost})`);
         }
         this.browser = await puppeteer_1.default.launch({
             headless: true, // true = sem janela, false = útil para depuração

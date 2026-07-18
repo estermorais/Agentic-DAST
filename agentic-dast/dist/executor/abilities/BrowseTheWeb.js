@@ -48,14 +48,16 @@ class BrowseTheWeb {
             // Chrome bypassa proxy para localhost por padrão — as duas flags
             // abaixo corrigem isso (mesma técnica usada no DOMExtractor):
             //   1. --proxy-bypass-list=<-loopback>: desabilita o bypass.
-            //   2. --host-resolver-rules=MAP localhost host.docker.internal:
-            //      reescreve localhost para o alias que o ZAP dentro do
-            //      container consegue resolver de volta ao host.
+            //   2. --host-resolver-rules=MAP localhost <alvo-interno>:
+            //      reescreve 'localhost' para o hostname que o ZAP dentro do
+            //      container consegue resolver via Docker network compartilhada
+            //      (extraído de ZAP_TARGET_URL, por padrão 'juice-shop').
+            const zapTargetHost = new URL(config_1.config.zapTargetUrl).hostname;
             args.push(`--proxy-server=http://${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`);
             args.push('--proxy-bypass-list=<-loopback>');
-            args.push('--host-resolver-rules=MAP localhost host.docker.internal');
+            args.push(`--host-resolver-rules=MAP localhost ${zapTargetHost}`);
             args.push('--ignore-certificate-errors');
-            console.log(`[Executor] Proxy ZAP ativo em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort} (localhost -> host.docker.internal)`);
+            console.log(`[Executor] Proxy ZAP ativo em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort} (localhost -> ${zapTargetHost})`);
         }
         this.browser = await puppeteer_1.default.launch({ headless: true, args });
         this.page = await this.browser.newPage();
