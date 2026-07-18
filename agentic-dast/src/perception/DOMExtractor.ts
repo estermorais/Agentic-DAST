@@ -55,12 +55,21 @@ export class DOMExtractor {
 
     if (config.useZapProxy) {
       // Roteia o tráfego pelo ZAP para auditoria passiva.
-      // Obs.: o Chrome faz bypass do proxy para localhost por padrão,
-      // então ZAP só verá tráfego se o navegador acessar URLs não-loopback.
-      // No Cenário C isto é aceitável — Abuse Cases também fazem detecções.
+      // O Chrome faz bypass do proxy para localhost por padrão, o que
+      // faria o ZAP não ver nada. Duas flags corrigem isso:
+      //   1. --proxy-bypass-list=<-loopback>: força o Chrome a rotear
+      //      inclusive localhost pelo proxy (não fazer bypass).
+      //   2. --host-resolver-rules=MAP localhost host.docker.internal:
+      //      reescreve 'localhost' para 'host.docker.internal' antes de
+      //      enviar a requisição ao proxy. Isso é necessário porque, do
+      //      ponto de vista do ZAP dentro do container, 'localhost' é o
+      //      próprio ZAP, não o Juice Shop. 'host.docker.internal' é o
+      //      alias que Docker Desktop provê para acessar o host.
       args.push(`--proxy-server=http://${config.zapProxyHost}:${config.zapProxyPort}`);
+      args.push('--proxy-bypass-list=<-loopback>');
+      args.push('--host-resolver-rules=MAP localhost host.docker.internal');
       args.push('--ignore-certificate-errors');
-      console.log(`[Percepção] Usando proxy ZAP em ${config.zapProxyHost}:${config.zapProxyPort}`);
+      console.log(`[Percepção] Usando proxy ZAP em ${config.zapProxyHost}:${config.zapProxyPort} (localhost -> host.docker.internal)`);
     }
 
     this.browser = await puppeteer.launch({
