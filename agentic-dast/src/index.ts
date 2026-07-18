@@ -72,7 +72,11 @@ async function main(): Promise<void> {
 
     // ── Fase 3c: Alertas ZAP (scan passivo) ────────────────
     console.log('[ FASE 3c ] Auditoria — coletando alertas ZAP...\n');
-    const zapFindings: Finding[] = await zapClient.getPassiveAlerts(config.targetUrl);
+    // Usa browserBaseUrl porque as mensagens que chegaram ao ZAP tem a
+    // URL literal que o Chrome enviou (juice-shop:3000 quando proxy ativo,
+    // localhost:3000 caso contrario). O filtro em getPassiveAlerts casa
+    // por substring de URL, entao precisa bater com o que foi gravado.
+    const zapFindings: Finding[] = await zapClient.getPassiveAlerts(config.browserBaseUrl);
 
     // ── Fase 4: Relatório consolidado ──────────────────────
     const allFindings = deduplicateFindings([

@@ -24,7 +24,7 @@ function resolveUrl(url) {
     if (/^https?:\/\//i.test(url))
         return url;
     try {
-        return new URL(url, config_1.config.targetUrl).toString();
+        return new URL(url, config_1.config.browserBaseUrl).toString();
     }
     catch {
         return url;
@@ -45,19 +45,17 @@ class BrowseTheWeb {
     async init() {
         const args = ['--no-sandbox', '--disable-setuid-sandbox'];
         if (config_1.config.useZapProxy) {
-            // Chrome bypassa proxy para localhost por padrão — as duas flags
-            // abaixo corrigem isso (mesma técnica usada no DOMExtractor):
-            //   1. --proxy-bypass-list=<-loopback>: desabilita o bypass.
-            //   2. --host-resolver-rules=MAP localhost <alvo-interno>:
-            //      reescreve 'localhost' para o hostname que o ZAP dentro do
-            //      container consegue resolver via Docker network compartilhada
-            //      (extraído de ZAP_TARGET_URL, por padrão 'juice-shop').
-            const zapTargetHost = new URL(config_1.config.zapTargetUrl).hostname;
+            // Roteia o browser do Actor pelo ZAP. Chrome, com proxy HTTP para
+            // URL HTTP, envia a URL LITERAL ao proxy e quem resolve o hostname
+            // e o ZAP. Por isso o resolveUrl acima ja usa config.browserBaseUrl
+            // (juice-shop:3000), que o ZAP resolve via Docker network dast-net.
+            // A flag --proxy-bypass-list=<-loopback> continua necessaria porque
+            // o proxy vive em localhost:8080 e o Chrome, por padrao, faria
+            // bypass para hosts loopback.
             args.push(`--proxy-server=http://${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`);
             args.push('--proxy-bypass-list=<-loopback>');
-            args.push(`--host-resolver-rules=MAP localhost ${zapTargetHost}`);
             args.push('--ignore-certificate-errors');
-            console.log(`[Executor] Proxy ZAP ativo em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort} (localhost -> ${zapTargetHost})`);
+            console.log(`[Executor] Proxy ZAP ativo em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort} (navegação via ${config_1.config.browserBaseUrl})`);
         }
         this.browser = await puppeteer_1.default.launch({ headless: true, args });
         this.page = await this.browser.newPage();

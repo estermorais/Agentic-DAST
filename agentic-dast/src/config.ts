@@ -25,6 +25,11 @@ function optional(key: string, defaultValue: string): string {
 const llmProvider = optional('LLM_PROVIDER', 'openrouter') as
   'anthropic' | 'ollama' | 'openrouter';
 
+// Variaveis pre-computadas usadas em campos derivados abaixo.
+const _targetUrl    = optional('TARGET_URL', 'http://localhost:3000');
+const _zapTargetUrl = optional('ZAP_TARGET_URL', 'http://juice-shop:3000');
+const _useZapProxy  = optional('USE_ZAP_PROXY', 'true') === 'true';
+
 export const config = {
   // ── Provedor de LLM ────────────────────────────────────────
   // Aceita:
@@ -54,12 +59,18 @@ export const config = {
   ollamaModel: optional('OLLAMA_MODEL', 'qwen2.5:7b'),
 
   // ── Alvo ───────────────────────────────────────────────────
-  // URL do alvo do ponto de vista do HOST (browser, agente, axios)
-  targetUrl: optional('TARGET_URL', 'http://localhost:3000'),
+  // URL do alvo do ponto de vista do HOST (axios direto, relatório)
+  targetUrl: _targetUrl,
   // URL do alvo do ponto de vista do CONTÊINER ZAP — necessária porque
   // 'localhost' dentro do container ZAP é ele próprio, não o Juice Shop.
   // O nome 'juice-shop' resolve via Docker network 'dast-net'.
-  zapTargetUrl: optional('ZAP_TARGET_URL', 'http://juice-shop:3000'),
+  zapTargetUrl: _zapTargetUrl,
+  // URL-base que o BROWSER (Puppeteer) usa nas navegacoes. Precisa ser
+  // 'juice-shop:3000' quando o trafego passa pelo ZAP, porque o Chrome
+  // envia a URL literal ao proxy e quem resolve o hostname destino e o
+  // proprio ZAP (do interior do seu container). Sem proxy, cai em
+  // localhost:3000 (que o host acessa direto via port mapping).
+  browserBaseUrl: _useZapProxy ? _zapTargetUrl : _targetUrl,
 
   // ── ZAP ────────────────────────────────────────────────────
   zapApiUrl:    optional('ZAP_API_URL', 'http://localhost:8080'),
@@ -69,5 +80,5 @@ export const config = {
 
   // ── Comportamento do agente ────────────────────────────────
   maxReactIterations: parseInt(optional('MAX_REACT_ITERATIONS', '25')),
-  useZapProxy:        optional('USE_ZAP_PROXY', 'true') === 'true',
+  useZapProxy:        _useZapProxy,
 } as const;

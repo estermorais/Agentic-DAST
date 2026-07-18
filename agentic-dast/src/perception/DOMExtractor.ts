@@ -54,25 +54,22 @@ export class DOMExtractor {
     const args = ['--no-sandbox', '--disable-setuid-sandbox'];
 
     if (config.useZapProxy) {
-      // Roteia o tráfego pelo ZAP para auditoria passiva.
-      // O Chrome faz bypass do proxy para localhost por padrão, o que
-      // faria o ZAP não ver nada. Duas flags corrigem isso:
-      //   1. --proxy-bypass-list=<-loopback>: força o Chrome a rotear
-      //      inclusive localhost pelo proxy (não fazer bypass).
-      //   2. --host-resolver-rules=MAP localhost <alvo-interno>:
-      //      reescreve 'localhost' para o nome de host que o ZAP
-      //      dentro do container consegue resolver via Docker network.
-      //      Do ponto de vista do container do ZAP, 'localhost' é o
-      //      próprio ZAP, não o alvo. Usar o hostname interno
-      //      (extraído de ZAP_TARGET_URL, por padrão 'juice-shop')
-      //      permite ao ZAP resolver e atingir o alvo pela rede
-      //      compartilhada 'dast-net' do docker-compose.
-      const zapTargetHost = new URL(config.zapTargetUrl).hostname;
+      // Roteia o trafego pelo ZAP para auditoria passiva.
+      // Chrome, ao usar proxy HTTP para uma URL HTTP, envia a URL LITERAL
+      // ao proxy sem resolver o hostname destino localmente — quem resolve
+      // e o proprio ZAP, de dentro do seu container. Como 'localhost' no
+      // container do ZAP e o proprio ZAP (nao o alvo), navegamos direto
+      // para 'juice-shop:3000' (config.browserBaseUrl), hostname que o
+      // ZAP resolve via Docker network 'dast-net'.
+      //
+      // A flag --proxy-bypass-list=<-loopback> continua necessaria porque
+      // o proxy em si mora em 'localhost:8080' e o Chrome, por padrao,
+      // faria bypass do proxy para hosts loopback — o que impediria a
+      // conexao ate o proprio ZAP.
       args.push(`--proxy-server=http://${config.zapProxyHost}:${config.zapProxyPort}`);
       args.push('--proxy-bypass-list=<-loopback>');
-      args.push(`--host-resolver-rules=MAP localhost ${zapTargetHost}`);
       args.push('--ignore-certificate-errors');
-      console.log(`[Percepção] Usando proxy ZAP em ${config.zapProxyHost}:${config.zapProxyPort} (localhost -> ${zapTargetHost})`);
+      console.log(`[Percepção] Usando proxy ZAP em ${config.zapProxyHost}:${config.zapProxyPort} (navegação via ${config.browserBaseUrl})`);
     }
 
     this.browser = await puppeteer.launch({
@@ -98,7 +95,7 @@ export class DOMExtractor {
     const routes: AppRoute[] = [];
 
     for (const routePath of JUICE_SHOP_ROUTES) {
-      const url = `${config.targetUrl}${routePath}`;
+      const url = `${config.browserBaseUrl}${routePath}`;
       console.log(`[Percepção] Visitando: ${url}`);
 
       const page = await this.browser.newPage();
@@ -348,7 +345,7 @@ export class DOMExtractor {
     });
 
     try {
-      await page.goto(`${config.targetUrl}/#/login`, {
+      await page.goto(`${config.browserBaseUrl}/#/login`, {
         waitUntil: 'networkidle2',
         timeout: 15_000,
       });
@@ -440,7 +437,7 @@ export class DOMExtractor {
 
     try {
       for (const route of authenticatedRoutes) {
-        await page.goto(`${config.targetUrl}${route}`, {
+        await page.goto(`${config.browserBaseUrl}${route}`, {
           waitUntil: 'networkidle2',
           timeout: 10_000,
         });
