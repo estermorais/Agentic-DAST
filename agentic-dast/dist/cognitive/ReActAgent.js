@@ -41,6 +41,14 @@ class ReActAgent {
             role: 'user',
             content: initialMessage,
         });
+        // Contador de falhas consecutivas de parser. Modelos capazes (Haiku,
+        // GPT-4o, etc.) as vezes divagam em prosa quando o contexto cresce e
+        // param de emitir 'Action:'. Em vez de encerrar na primeira falha
+        // (comportamento antigo, custava as iteracoes restantes), damos ate
+        // MAX_CONSECUTIVE_PARSE_FAILURES chances com feedback explicito para
+        // reformatar. Se falhar N vezes em sequencia, ai sim encerra.
+        const MAX_CONSECUTIVE_PARSE_FAILURES = 3;
+        let consecutiveParseFailures = 0;
         for (let i = 1; i <= config_1.config.maxReactIterations; i++) {
             console.log(`\n[Cognitivo] ── Iteração ${i}/${config_1.config.maxReactIterations} ──`);
             // 1. Chama o LLM (Anthropic ou Ollama, transparente para o loop)
@@ -54,18 +62,38 @@ class ReActAgent {
             // 3. Parseia Thought + Action do texto
             const parsed = this.parseReActOutput(rawText);
             if (!parsed) {
-                // O LLM não seguiu o formato ReAct. Comum em modelos pequenos
-                // (Llama 3B etc.). Encerra graciosamente em vez de "limite atingido".
-                console.warn('[Cognitivo] Não foi possível parsear a resposta. Encerrando.');
-                return {
-                    findings: this.dispatcher.getFindings(),
-                    steps,
-                    totalIterations: i,
-                    finishedCleanly: false,
-                    summary: `Parser falhou na iteração ${i}. O modelo (${this.llm.name}) ` +
-                        `pode estar gerando saída fora do formato ReAct esperado.`,
-                };
+                consecutiveParseFailures++;
+                console.warn(`[Cognitivo] Parser falhou (${consecutiveParseFailures}/${MAX_CONSECUTIVE_PARSE_FAILURES}). ` +
+                    `Solicitando reformatacao ao LLM.`);
+                if (consecutiveParseFailures >= MAX_CONSECUTIVE_PARSE_FAILURES) {
+                    console.warn('[Cognitivo] Excedeu falhas consecutivas de parser. Encerrando.');
+                    return {
+                        findings: this.dispatcher.getFindings(),
+                        steps,
+                        totalIterations: i,
+                        finishedCleanly: false,
+                        summary: `Parser falhou ${MAX_CONSECUTIVE_PARSE_FAILURES}x consecutivas ate a iteracao ${i}. ` +
+                            `O modelo (${this.llm.name}) parou de seguir o formato ReAct.`,
+                    };
+                }
+                // Feedback explicito para o LLM reformatar. Nao registra step
+                // porque nao houve Action executada.
+                this.conversationHistory.push({
+                    role: 'user',
+                    content: 'Sua ultima resposta nao pode ser parseada. Voce PRECISA seguir o ' +
+                        'formato ReAct exato, mesmo ao resumir ou planejar:\n\n' +
+                        'Thought: [seu raciocinio]\n' +
+                        'Action: [nome_da_acao]\n' +
+                        'Action Input:\n' +
+                        '{ ... json valido ... }\n\n' +
+                        'Acoes validas: make_request, navigate, fill_field, click_element, ' +
+                        'read_page, extract_tokens, report_finding, finish.\n' +
+                        'Se voce ja completou a analise, use Action: finish com um summary.',
+                });
+                continue;
             }
+            // Parser passou — zera o contador.
+            consecutiveParseFailures = 0;
             console.log(`[Cognitivo] Thought: ${parsed.thought.substring(0, 150)}...`);
             console.log(`[Cognitivo] Action: ${parsed.action.action}`);
             // 4. Verifica se o agente quer encerrar

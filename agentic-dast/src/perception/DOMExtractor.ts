@@ -300,12 +300,19 @@ export class DOMExtractor {
     // ── Estratégia 1: Login via API direta ─────────────────────
     // Mais rápida e confiável que browser. Tenta cada usuário default
     // do Juice Shop até um autenticar.
+    // Login por API: usa browserBaseUrl e passa pelo ZAP (quando ativo)
+    // pela mesma razao do HttpClient — a request precisa alimentar a
+    // auditoria passiva. Detalhes em executor/abilities/HttpClient.ts.
+    const axiosProxy = config.useZapProxy
+      ? { host: config.zapProxyHost, port: config.zapProxyPort, protocol: 'http' as const }
+      : false as const;
+
     for (const user of DEFAULT_USERS) {
       try {
         const response = await axios.post(
-          `${config.targetUrl}/rest/user/login`,
+          `${config.browserBaseUrl}/rest/user/login`,
           { email: user.email, password: user.password },
-          { timeout: 10_000, validateStatus: () => true },
+          { timeout: 10_000, validateStatus: () => true, proxy: axiosProxy },
         );
 
         const jwt = response.data?.authentication?.token;

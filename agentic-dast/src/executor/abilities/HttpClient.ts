@@ -18,13 +18,19 @@ import { config } from '../../config';
  * URL-base do alvo. Necessário porque o LLM, ao gerar make_request,
  * tipicamente usa paths relativos — sem isso, o axios falha com
  * "Invalid URL".
+ *
+ * Usa browserBaseUrl (nao targetUrl) porque, com proxy ZAP ativo, o
+ * axios envia essa URL literal ao proxy e quem resolve o hostname
+ * destino e o ZAP, de dentro do seu container. 'localhost' la dentro
+ * seria o proprio ZAP, entao usamos 'juice-shop:3000', que resolve
+ * pela Docker network 'dast-net' (mesma logica do Chrome/Puppeteer).
  */
 function resolveUrl(url: string): string {
   if (/^https?:\/\//i.test(url)) return url;
   try {
-    return new URL(url, config.targetUrl).toString();
+    return new URL(url, config.browserBaseUrl).toString();
   } catch {
-    return url; // último recurso — deixa o axios reclamar com mensagem clara
+    return url;
   }
 }
 
@@ -67,6 +73,18 @@ export class HttpClient {
       validateStatus: () => true,
       timeout: 10_000,
     };
+
+    // Roteia pelo ZAP quando o proxy esta ativo, para que as chamadas
+    // que o LLM emite via 'make_request' tambem alimentem a auditoria
+    // passiva. Sem isso, so o trafego do Chrome era gravado e o scan
+    // passivo perdia toda a superficie de API testada pelo agente.
+    if (config.useZapProxy) {
+      axiosConfig.proxy = {
+        host: config.zapProxyHost,
+        port: config.zapProxyPort,
+        protocol: 'http',
+      };
+    }
 
     try {
       const response = await axios(axiosConfig);
