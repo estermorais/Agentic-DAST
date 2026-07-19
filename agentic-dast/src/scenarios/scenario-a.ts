@@ -51,8 +51,19 @@ async function main(): Promise<void> {
   console.log('\n[ ETAPA 2 ] Scan ativo...\n');
 
   const scanId = await zapClient.startActiveScan(zapTargetUrl);
+  let scanCompleted = false;
   if (scanId) {
-    await zapClient.waitForScanCompletion(scanId, 600_000);
+    // 30 min: o scan ativo do ZAP na Juice Shop injeta muitos payloads
+    // em cada parametro de cada endpoint descoberto pelo spider. 10 min
+    // (valor anterior) tipicamente termina em 30-40% na Juice Shop.
+    scanCompleted = await zapClient.waitForScanCompletion(scanId, 1_800_000);
+    if (!scanCompleted) {
+      // Se o scan nao terminou no orcamento, PARA ele antes de coletar
+      // alertas. Sem isso o ZAP fica saturado e as chamadas de leitura
+      // da API dao timeout, resultando em relatorio vazio falso.
+      console.warn('[Cenário A] Interrompendo scan ativo para liberar o ZAP para leitura.');
+      await zapClient.stopActiveScan(scanId);
+    }
   } else {
     console.warn('[Cenário A] Scan ativo não iniciou. Coletando apenas alertas passivos.');
   }

@@ -44,15 +44,48 @@ class ZapClient {
      */
     async getMessageCount() {
         try {
+            // Timeout de 30s (nao 5s) porque o ZAP sob carga de scan ativo
+            // demora para responder API calls, e o count = 0 falso quando o
+            // catch abaixo dispara induz o operador a achar que o proxy nao
+            // capturou trafego quando na verdade so a leitura falhou.
             const response = await axios_1.default.get(`${this.baseUrl}/JSON/core/view/numberOfMessages/`, {
                 params: { apikey: this.apiKey },
-                timeout: 5_000,
+                timeout: 30_000,
                 validateStatus: () => true,
             });
             return parseInt(response.data?.numberOfMessages ?? '0', 10);
         }
         catch {
             return 0;
+        }
+    }
+    // ===========================================================
+    // Controle de scan ativo (parar em andamento)
+    // ===========================================================
+    /**
+     * Pausa/para um scan ativo em andamento (por scanId ou todos).
+     * Necessario antes de coletar alertas quando o timeout do scan
+     * foi atingido — sem isso, o ZAP fica com CPU/IO saturados
+     * respondendo requests do scanner interno e as chamadas de
+     * leitura da API entram em fila e dao timeout.
+     */
+    async stopActiveScan(scanId) {
+        try {
+            const endpoint = scanId
+                ? `${this.baseUrl}/JSON/ascan/action/stop/`
+                : `${this.baseUrl}/JSON/ascan/action/stopAllScans/`;
+            const params = { apikey: this.apiKey };
+            if (scanId)
+                params.scanId = scanId;
+            await axios_1.default.get(endpoint, {
+                params,
+                timeout: 30_000,
+                validateStatus: () => true,
+            });
+            console.log(`[Auditoria] Scan ativo ${scanId ?? '(todos)'} interrompido.`);
+        }
+        catch (err) {
+            console.warn(`[Auditoria] Falha ao interromper scan ativo: ${err.message}`);
         }
     }
     async getPassiveAlerts(targetBaseUrl) {
@@ -66,13 +99,16 @@ class ZapClient {
             // casam com a baseurl externa (localhost:3000). Sem filtro,
             // pegamos todos os alertas e o filtro fica a cargo da fase de
             // classificação (que casa por keyword no título).
+            // Timeout 5 min: o ZAP responde /alerts/ em ~1s quando ocioso,
+            // mas com scan ativo em andamento ou logo apos podem levar minutos.
+            // 60s era insuficiente e mascarava a coleta como falha de rede.
             const response = await axios_1.default.get(`${this.baseUrl}/JSON/alert/view/alerts/`, {
                 params: {
                     apikey: this.apiKey,
                     start: 0,
                     count: 500,
                 },
-                timeout: 60_000,
+                timeout: 300_000,
                 validateStatus: () => true,
             });
             // Sinaliza ao caller qual URL foi solicitada (apenas para log)
