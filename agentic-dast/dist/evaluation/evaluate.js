@@ -144,7 +144,8 @@ function printReport(evaluated, gt) {
     console.log(`TP: ${overall.truePositives}  |  ` +
         `FP: ${overall.falsePositives}  |  ` +
         `FN: ${overall.falseNegatives}  |  ` +
-        `GT total: ${gt.length}`);
+        `GT total: ${gt.length}  |  ` +
+        `Alertas config (fora do GT): ${evaluated.classification.configurationalFindings.length}`);
     console.log(`Precision: ${overall.precision.toFixed(3)}  |  ` +
         `Recall: ${overall.recall.toFixed(3)}  |  ` +
         `F1: ${overall.f1.toFixed(3)}`);

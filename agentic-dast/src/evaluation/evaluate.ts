@@ -153,7 +153,8 @@ function printReport(evaluated: EvaluatedReport, gt: GroundTruthEntry[]): void {
     `TP: ${overall.truePositives}  |  ` +
     `FP: ${overall.falsePositives}  |  ` +
     `FN: ${overall.falseNegatives}  |  ` +
-    `GT total: ${gt.length}`
+    `GT total: ${gt.length}  |  ` +
+    `Alertas config (fora do GT): ${evaluated.classification.configurationalFindings.length}`
   );
   console.log(
     `Precision: ${overall.precision.toFixed(3)}  |  ` +

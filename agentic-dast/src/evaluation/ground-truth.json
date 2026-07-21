@@ -10,8 +10,9 @@
       "SENSITIVE_DATA_EXPOSURE",
       "SQL_INJECTION"
     ],
-    "totalEntries": 18,
-    "lastUpdated": "2026-05-04"
+    "totalEntries": 19,
+    "lastUpdated": "2026-07-20",
+    "matchingNote": "Cada entrada tem opcionalmente um 'endpointHint'. Quando presente, o classificador exige que o hint (substring) apareça no titulo/descricao/evidence do finding, o que impede que uma vuln do mesmo tipo em endpoint diferente (ex: SQLi em /rest/products/search vs. /rest/user/login) case como TP indevidamente."
   },
   "entries": [
     {
@@ -20,7 +21,8 @@
       "challengeName": "Negative Order",
       "description": "É possível adicionar quantidade negativa ao carrinho via PUT /api/BasketItems/:id, resultando em desconto indevido no pedido.",
       "endpoint": "PUT /api/BasketItems/:id",
-      "detectionKeywords": ["negative", "negativa", "quantidade", "quantity", "negative order"],
+      "endpointHint": "basketitems",
+      "detectionKeywords": ["negative quantity", "quantidade negativa", "negative order", "negative amount"],
       "expectedSeverity": "HIGH"
     },
     {
@@ -29,7 +31,8 @@
       "challengeName": "Zero Stars",
       "description": "É possível enviar review com rating zero (fora do intervalo válido 1-5) via POST /api/Feedbacks.",
       "endpoint": "POST /api/Feedbacks",
-      "detectionKeywords": ["zero star", "zero estrela", "rating zero", "input validation", "feedback rating"],
+      "endpointHint": "feedbacks",
+      "detectionKeywords": ["zero star", "zero estrela", "rating zero", "rating validation", "zerostar"],
       "expectedSeverity": "MEDIUM"
     },
     {
@@ -38,16 +41,18 @@
       "challengeName": "Forged Coupon",
       "description": "Cupom de desconto pode ser falsificado por engenharia reversa do algoritmo de geração no frontend.",
       "endpoint": "PUT /rest/basket/:id/coupon",
-      "detectionKeywords": ["coupon", "cupom", "forged coupon", "discount"],
+      "endpointHint": "coupon",
+      "detectionKeywords": ["forged coupon", "cupom forjado", "coupon forgery", "coupon bypass"],
       "expectedSeverity": "MEDIUM"
     },
     {
       "id": "GT-BAC-01",
       "category": "BROKEN_ACCESS_CONTROL",
       "challengeName": "View Basket",
-      "description": "IDOR em GET /api/Baskets/:id permite visualizar carrinho de outros usuários trocando o ID.",
-      "endpoint": "GET /api/Baskets/:id",
-      "detectionKeywords": ["idor", "basket", "carrinho", "broken access", "horizontal privilege", "baskets/2", "view basket"],
+      "description": "IDOR em GET /api/Baskets/:id ou /rest/basket/:id permite visualizar carrinho de outros usuários trocando o ID.",
+      "endpoint": "GET /rest/basket/:id",
+      "endpointHint": "basket",
+      "detectionKeywords": ["idor", "view basket", "basket idor", "carrinho de outro", "other user basket", "horizontal privilege", "rest/basket/"],
       "expectedSeverity": "HIGH"
     },
     {
@@ -56,7 +61,8 @@
       "challengeName": "Manipulate Basket",
       "description": "É possível modificar BasketItems de carrinho alheio via POST /api/BasketItems com BasketId diferente do próprio.",
       "endpoint": "POST /api/BasketItems",
-      "detectionKeywords": ["manipulate basket", "basketid", "basket items", "modify basket"],
+      "endpointHint": "basketitems",
+      "detectionKeywords": ["manipulate basket", "basket manipulation", "basketid tamper", "modify basket", "basket items"],
       "expectedSeverity": "HIGH"
     },
     {
@@ -65,7 +71,8 @@
       "challengeName": "Admin Section",
       "description": "Rota /#/administration acessível sem privilégio de administrador, expondo lista de feedbacks e usuários.",
       "endpoint": "GET /#/administration",
-      "detectionKeywords": ["admin", "administration", "admin section", "admin route", "privilege escalation"],
+      "endpointHint": "admin",
+      "detectionKeywords": ["admin section", "administration", "admin route", "administracao", "administrativo", "administrativos", "endpoints administrativos", "privilege escalation admin", "unauthenticated admin", "unauthorized admin"],
       "expectedSeverity": "HIGH"
     },
     {
@@ -74,7 +81,8 @@
       "challengeName": "Change Other Users",
       "description": "PATCH /api/Users/:id permite alterar perfil de qualquer usuário sem checagem de ownership.",
       "endpoint": "PATCH /api/Users/:id",
-      "detectionKeywords": ["change user", "patch user", "users/:id", "modify user", "other user"],
+      "endpointHint": "users/",
+      "detectionKeywords": ["change other user", "patch user", "modify other user", "user ownership bypass", "alter user profile"],
       "expectedSeverity": "HIGH"
     },
     {
@@ -83,7 +91,8 @@
       "challengeName": "Persistent XSS via Customer Feedback",
       "description": "POST /api/Feedbacks aceita comment com payload HTML/JS que é renderizado sem escape no painel administrativo.",
       "endpoint": "POST /api/Feedbacks",
-      "detectionKeywords": ["xss", "cross-site scripting", "cross site scripting", "feedback xss", "stored xss", "persistent xss", "iframe"],
+      "endpointHint": "feedback",
+      "detectionKeywords": ["xss", "cross-site scripting", "cross site scripting", "stored xss", "persistent xss", "html injection"],
       "expectedSeverity": "HIGH"
     },
     {
@@ -92,7 +101,8 @@
       "challengeName": "Persistent XSS via REST API",
       "description": "PATCH /api/Users/:id aceita username com payload HTML/JS armazenado e renderizado em outras telas.",
       "endpoint": "PATCH /api/Users/:id",
-      "detectionKeywords": ["xss", "cross-site scripting", "user xss", "username xss", "stored xss", "persistent xss"],
+      "endpointHint": "users/",
+      "detectionKeywords": ["xss", "cross-site scripting", "cross site scripting", "stored xss", "persistent xss", "username xss"],
       "expectedSeverity": "HIGH"
     },
     {
@@ -101,7 +111,8 @@
       "challengeName": "DOM XSS",
       "description": "Campo de busca renderiza payload sem sanitização via JavaScript no DOM.",
       "endpoint": "GET /#/search?q=...",
-      "detectionKeywords": ["dom xss", "search xss", "reflected xss", "xss via search"],
+      "endpointHint": "search",
+      "detectionKeywords": ["dom xss", "search xss", "reflected xss", "xss via search", "xss no search"],
       "expectedSeverity": "MEDIUM"
     },
     {
@@ -110,7 +121,8 @@
       "challengeName": "Forged Signed JWT (alg:none)",
       "description": "Backend aceita JWT com header alg:none e nenhuma assinatura, permitindo forjar identidade arbitrária.",
       "endpoint": "GET /rest/user/whoami",
-      "detectionKeywords": ["jwt", "alg:none", "alg none", "none algorithm", "jwt bypass", "jwt signature", "jwt forge"],
+      "endpointHint": "jwt",
+      "detectionKeywords": ["alg:none", "alg none", "none algorithm", "jwt signature bypass", "jwt assinatura", "signature bypass", "signature validation"],
       "expectedSeverity": "CRITICAL"
     },
     {
@@ -119,7 +131,8 @@
       "challengeName": "JWT Issue (admin tamper)",
       "description": "Payload JWT pode ser alterado para incluir role:admin sem invalidar a sessão.",
       "endpoint": "GET /rest/user/whoami",
-      "detectionKeywords": ["jwt", "jwt admin", "jwt tamper", "jwt payload", "jwt role", "jwt manipulation"],
+      "endpointHint": "jwt",
+      "detectionKeywords": ["jwt tamper", "jwt payload tamper", "jwt admin", "role admin tamper", "jwt manipulation", "tampered token"],
       "expectedSeverity": "CRITICAL"
     },
     {
@@ -128,7 +141,8 @@
       "challengeName": "Confidential Document",
       "description": "Arquivo /ftp/acquisitions.md acessível sem autenticação.",
       "endpoint": "GET /ftp/acquisitions.md",
-      "detectionKeywords": ["ftp", "acquisitions", "confidential document", "ftp directory", "exposição de dados sensíveis", "recursos acessíveis sem autenticação"],
+      "endpointHint": "ftp",
+      "detectionKeywords": ["acquisitions", "confidential document", "ftp directory", "ftp listing", "recursos acessiveis sem autenticacao", "sensitive directory"],
       "expectedSeverity": "MEDIUM"
     },
     {
@@ -137,7 +151,8 @@
       "challengeName": "Backup File",
       "description": "Arquivo de backup /ftp/package.json.bak exposto, revelando dependências e estrutura interna.",
       "endpoint": "GET /ftp/package.json.bak",
-      "detectionKeywords": ["backup", "package.json.bak", ".bak", "backup file", "exposed backup"],
+      "endpointHint": "package.json.bak",
+      "detectionKeywords": ["package.json.bak", "package-lock.json.bak", "backup file", "arquivo de backup", ".bak exposto"],
       "expectedSeverity": "MEDIUM"
     },
     {
@@ -146,7 +161,8 @@
       "challengeName": "Exposed User List",
       "description": "GET /api/Users retorna lista completa de usuários (incluindo admin) sem autenticação.",
       "endpoint": "GET /api/Users",
-      "detectionKeywords": ["users list", "user enumeration", "/api/users", "exposed users", "user list", "api users"],
+      "endpointHint": "/api/users",
+      "detectionKeywords": ["users list", "user enumeration", "exposed users", "user list", "api/users", "listagem de usuarios", "listagem de todos os usuarios"],
       "expectedSeverity": "CRITICAL"
     },
     {
@@ -155,7 +171,8 @@
       "challengeName": "Admin Configuration Disclosure",
       "description": "Endpoint /rest/admin/application-configuration acessível sem credenciais de admin, expondo segredos.",
       "endpoint": "GET /rest/admin/application-configuration",
-      "detectionKeywords": ["application-configuration", "admin configuration", "config disclosure", "exposed configuration", "application configuration"],
+      "endpointHint": "application-configuration",
+      "detectionKeywords": ["application-configuration", "admin configuration disclosure", "config disclosure", "exposed configuration", "application configuration"],
       "expectedSeverity": "HIGH"
     },
     {
@@ -164,17 +181,29 @@
       "challengeName": "Login Admin",
       "description": "POST /rest/user/login vulnerável a SQL injection clássica via email com payload admin'--.",
       "endpoint": "POST /rest/user/login",
-      "detectionKeywords": ["sql injection", "sqli", "login admin", "sql injection bypass", "auth bypass", "admin'--"],
+      "endpointHint": "user/login",
+      "detectionKeywords": ["login admin", "admin'--", "sql injection bypass", "auth bypass", "authentication bypass", "sqli_auth_bypass", "sqli auth bypass", "endpoint de autenticacao"],
       "expectedSeverity": "CRITICAL"
     },
     {
       "id": "GT-SQLI-02",
       "category": "SQL_INJECTION",
       "challengeName": "Login Bender",
-      "description": "Variante de SQLi no mesmo endpoint usando payload OR 1=1.",
+      "description": "Variante de SQLi no mesmo endpoint (/rest/user/login) usando payload OR 1=1.",
       "endpoint": "POST /rest/user/login",
-      "detectionKeywords": ["sql injection", "or 1=1", "1=1", "tautology", "boolean injection"],
+      "endpointHint": "user/login",
+      "detectionKeywords": ["or 1=1", "1=1--", "tautology", "boolean injection", "login bender", "bender@juice"],
       "expectedSeverity": "CRITICAL"
+    },
+    {
+      "id": "GT-SQLI-03",
+      "category": "SQL_INJECTION",
+      "challengeName": "Search Injection",
+      "description": "SQL injection via query parameter 'q' em GET /rest/products/search permite extração de dados por UNION-based ou error-based. Vulnerabilidade real do Juice Shop descoberta consistentemente por agentes autônomos.",
+      "endpoint": "GET /rest/products/search?q=",
+      "endpointHint": "products/search",
+      "detectionKeywords": ["search injection", "products/search", "search sqli", "union select", "union-based", "sqli em /rest/products", "sql injection em /rest/products"],
+      "expectedSeverity": "HIGH"
     }
   ]
 }

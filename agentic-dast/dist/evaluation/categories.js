@@ -18,6 +18,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CANONICAL_CATEGORIES = void 0;
 exports.inferCategory = inferCategory;
+exports.isConfigurationalAlert = isConfigurationalAlert;
 /** Mapa direto de códigos conhecidos → categoria canônica */
 const CODE_TO_CANONICAL = {
     // ── Abuse Cases ──────────────────────────────────────────────
@@ -88,4 +89,57 @@ exports.CANONICAL_CATEGORIES = [
     'SENSITIVE_DATA_EXPOSURE',
     'SQL_INJECTION',
 ];
+// ================================================================
+// Segregacao: alertas de CONFIGURACAO vs. findings FUNCIONAIS
+// ================================================================
+//
+// O Ground Truth deste TCC cataloga apenas as 18 vulnerabilidades
+// funcionais do OWASP Juice Shop (SQLi, XSS, IDOR, JWT, etc.). O
+// scanner ZAP passivo agrega, em paralelo, muitos alertas de
+// hardening/misconfig (headers de seguranca ausentes, CORS wildcard,
+// timestamps expostos) que sao SINAIS uteis mas nao entradas do GT.
+// Contabiliza-los como FP penaliza injustamente cenarios que ativam
+// o ZAP passivo (B, C e ate D), inflando o denominador da Precisao
+// e distorcendo o comparativo.
+//
+// A funcao abaixo identifica esses alertas para que evaluate.ts os
+// separe em um bucket 'configurational' que entra no relatorio como
+// contagem paralela, fora do calculo de TP/FP/FN.
+//
+// Regra: um finding e configurational se
+//   - seu titulo comeca com '[ZAP] ' (marca da conversao ZapClient) E
+//   - o plugin/tipo bate com uma das familias tipicamente
+//     informativas listadas abaixo.
+// Vulns funcionais que o proprio ZAP as vezes flagra (SQL Injection,
+// XSS, Path Traversal via scan ativo) NAO caem aqui, e continuam
+// concorrendo a TP no Ground Truth normalmente.
+const CONFIGURATIONAL_ZAP_KEYWORDS = [
+    // headers de seguranca ausentes
+    'content security policy', 'csp header',
+    'x-content-type-options', 'x-frame-options',
+    'strict-transport-security', 'hsts',
+    'anti-clickjacking', 'clickjacking',
+    'cache-control', 'cache control',
+    // CORS
+    'cross-domain misconfiguration', 'cross domain misconfiguration',
+    // fingerprinting/verbosidade
+    'timestamp disclosure',
+    'modern web application',
+    'user agent fuzzer',
+    'vulnerable js library',
+    'private ip disclosure',
+    'session id in url',
+    'application error disclosure',
+    'debug error messages',
+    'authentication request identified',
+    'session management response identified',
+];
+function isConfigurationalAlert(finding) {
+    const t = finding.title.toLowerCase();
+    const isZap = t.startsWith('[zap]')
+        || (finding.category ?? '').toUpperCase().startsWith('ZAP_PLUGIN_');
+    if (!isZap)
+        return false;
+    return CONFIGURATIONAL_ZAP_KEYWORDS.some((k) => t.includes(k));
+}
 //# sourceMappingURL=categories.js.map

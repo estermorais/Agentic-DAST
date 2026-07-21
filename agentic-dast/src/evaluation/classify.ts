@@ -20,7 +20,20 @@
  */
 
 import { Finding } from '../executor/ActionDispatcher';
-import { CanonicalCategory, inferCategory } from './categories';
+import { CanonicalCategory, inferCategory, isConfigurationalAlert } from './categories';
+
+/**
+ * Normaliza texto para matching diacritic-insensitive: 'administração'
+ * casa com 'administracao'. Sem isso, findings escritos em portugues
+ * com acentos falham em bater com keywords escritas sem acento no GT
+ * (e vice-versa), o que gerou FNs falsos no AbuseAdminRoute.
+ */
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+}
 
 // ===========================================================
 // Tipos
@@ -32,6 +45,10 @@ export interface GroundTruthEntry {
   challengeName: string;
   description: string;
   endpoint: string;
+  /** Substring que precisa aparecer no texto do finding (title|description|
+   *  evidence) para o match ser aceito. Impede over-matching entre
+   *  vulns da mesma categoria em endpoints diferentes. Opcional. */
+  endpointHint?: string;
   detectionKeywords: string[];
   expectedSeverity: string;
 }
@@ -47,6 +64,10 @@ export interface ClassificationResult {
   falsePositives:   ClassifiedFinding[];   // findings sem correspondência
   falseNegatives:   GroundTruthEntry[];    // entradas GT não detectadas
   matchedGtIds:     Set<string>;
+  /** Alertas informativos de configuracao (headers, CORS, timestamps, JS
+   *  lib version, etc.) segregados antes da classificacao. Nao entram
+   *  em TP/FP/FN — sao reportados a parte pelo evaluate.ts. */
+  configurationalFindings: Finding[];
 }
 
 // ===========================================================
@@ -60,16 +81,39 @@ export function classify(
   const matchedGtIds = new Set<string>();
   const truePositives:  ClassifiedFinding[] = [];
   const falsePositives: ClassifiedFinding[] = [];
+  const configurationalFindings: Finding[] = [];
 
   for (const finding of findings) {
-    const inferredCategory = inferCategory(finding.category, finding.title);
-    const text = `${finding.title} ${finding.description}`.toLowerCase();
+    // 1. Segrega alertas de configuracao (headers, CORS, timestamps,
+    //    versao de lib JS, etc.). Nao concorrem a TP/FP no calculo das
+    //    metricas funcionais — sao reportados em bucket separado.
+    if (isConfigurationalAlert(finding)) {
+      configurationalFindings.push(finding);
+      continue;
+    }
 
-    // Procura uma entrada GT compatível e ainda não casada
+    const inferredCategory = inferCategory(finding.category, finding.title);
+    // Inclui evidence no texto de match: o LLM/AbuseCase frequentemente
+    // coloca o endpoint (ex: 'POST /rest/user/login') so na evidence.
+    // Normalizado diacritic-insensitive: 'administracao' == 'administração'.
+    const text = normalize(`${finding.title} ${finding.description} ${finding.evidence ?? ''}`);
+
+    // Procura uma entrada GT compativel e ainda nao casada.
+    // Match precisa satisfazer:
+    //   a) mesma categoria canonica
+    //   b) pelo menos uma keyword do GT no texto
+    //   c) se o GT tem endpointHint, ele tambem precisa aparecer no
+    //      texto (evita over-matching entre vulns da mesma categoria
+    //      em endpoints diferentes)
     const candidate = groundTruth.find((gt) => {
       if (matchedGtIds.has(gt.id)) return false;
       if (gt.category !== inferredCategory) return false;
-      return gt.detectionKeywords.some((kw) => text.includes(kw.toLowerCase()));
+      const kwMatch = gt.detectionKeywords.some((kw) => text.includes(normalize(kw)));
+      if (!kwMatch) return false;
+      if (gt.endpointHint && !text.includes(normalize(gt.endpointHint))) {
+        return false;
+      }
+      return true;
     });
 
     if (candidate) {
@@ -91,5 +135,11 @@ export function classify(
   // Falsos Negativos: entradas GT que nenhum finding cobriu
   const falseNegatives = groundTruth.filter((gt) => !matchedGtIds.has(gt.id));
 
-  return { truePositives, falsePositives, falseNegatives, matchedGtIds };
+  return {
+    truePositives,
+    falsePositives,
+    falseNegatives,
+    matchedGtIds,
+    configurationalFindings,
+  };
 }
