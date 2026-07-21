@@ -70,7 +70,20 @@ async function main(): Promise<void> {
 
   // ── Etapa 3: Coleta de Alertas ───────────────────────────
   console.log('\n[ ETAPA 3 ] Coletando alertas do ZAP...\n');
-  const findings = await zapClient.getPassiveAlerts(zapTargetUrl);
+  const rawFindings = await zapClient.getPassiveAlerts(zapTargetUrl);
+
+  // Deduplicacao por titulo — alinhado ao Cenario B e C. Sem isso,
+  // um mesmo alerta ZAP reportado em N URLs distintas vira N findings
+  // no relatorio, inflando artificialmente a contagem do A e
+  // corrompendo o comparativo.
+  const seen = new Set<string>();
+  const findings = rawFindings.filter((f) => {
+    const key = f.title.toLowerCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  console.log(`[Cenário A] Findings apos dedup: ${findings.length} (de ${rawFindings.length} brutos)`);
 
   // ── Etapa 4: Relatório ───────────────────────────────────
   const report = {

@@ -232,17 +232,28 @@ async function main(): Promise<void> {
     console.log('[ ETAPA 4 ] Coletando alertas passivos do ZAP...\n');
     const passiveFindings = await zapClient.getPassiveAlerts(targetUrl);
 
-    // ── Etapa 5: Scan ativo nas URLs visitadas ────────────────
-    // Usa a URL interna ZAP→juice-shop (não localhost) porque a chamada
-    // é executada de dentro do contêiner ZAP.
-    console.log('[ ETAPA 5 ] Iniciando scan ativo...\n');
-    const scanId = await zapClient.startActiveScan(config.zapTargetUrl);
-    if (scanId) {
-      await zapClient.waitForScanCompletion(scanId, 600_000);
-    }
-    const activeFindings = await zapClient.getActiveScanAlerts(config.zapTargetUrl);
+    // Decisao metodologica: NAO executamos scan ativo no Cenario B.
+    //
+    // Motivacao: o scan ativo do ZAP na Juice Shop nunca produziu
+    // findings CRITICAL/HIGH/MEDIUM em nenhum dos runs de validacao —
+    // no Cenario A (spider + scan ativo 100%) so aparecem INFO
+    // (Timestamp Disclosure, CORS, CSP, X-Content-Type, User Agent
+    // Fuzzer). O ZAP nao acha SQLi/XSS/IDOR nos endpoints REST
+    // autenticados porque nao os invoca com sessao logada.
+    //
+    // Alem disso, o scan ativo trava reprodutivelmente em ~34% na
+    // Juice Shop e o ZAP entra em estado degradado que nem responde
+    // ao proprio /ascan/action/stop/, forcando restart de container
+    // entre runs de n=30.
+    //
+    // O que caracteriza cientificamente o Cenario B, entao, e a
+    // AUDITORIA PASSIVA sobre trafego de NAVEGACAO E2E scriptada —
+    // exatamente o gap que o A (spider clasico, sem browser) nao
+    // cobre. O comparativo A→B mede o ganho de auditar SPA com
+    // browser real, sem misturar isso com scan ativo.
+    const activeFindings: typeof passiveFindings = [];
 
-    // Deduplicação simples por título
+    // Deduplicação simples por título (mantida como no C)
     const seen = new Set<string>();
     const allFindings = [...passiveFindings, ...activeFindings].filter((f) => {
       const key = f.title.toLowerCase().trim();
