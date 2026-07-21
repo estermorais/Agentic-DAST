@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Runner da rodada oficial (n=30 por cenario) do experimento comparativo
   do TCC Agentic DAST.
@@ -62,7 +62,6 @@ $LOG_CSV     = Join-Path $REPORTS_DIR "_run-log.csv"
 $CSV_HEADER  = "timestamp_iso,run_index,scenario,report_file,findings,duration_s,status"
 
 $ZAP_HEALTH_TIMEOUT_S     = 60
-$JUICE_HEALTH_TIMEOUT_S   = 60
 $RATE_LIMIT_BACKOFF_S     = 300      # 5 min entre retries de rate limit
 $RATE_LIMIT_MAX_ATTEMPTS  = 3
 
@@ -92,11 +91,31 @@ function Wait-ContainerHealthy {
 
 function Reset-Environment {
   Write-Info "docker compose restart juice-shop zap..."
-  docker compose restart juice-shop zap 2>&1 | Out-Null
-  Wait-ContainerHealthy -Name "zap"        -TimeoutS $ZAP_HEALTH_TIMEOUT_S
-  # juice-shop e considerado healthy pelo Docker mesmo se nao houver
-  # healthcheck definido — nesse caso, pausa curta e segue.
-  try { Wait-ContainerHealthy -Name "juice-shop" -TimeoutS 10 } catch { Start-Sleep -Seconds 5 }
+  # PS 5.1 wrapea cada linha do stderr de um exe nativo como
+  # NativeCommandError, e com ErrorActionPreference=Stop isso vira
+  # excecao mesmo quando o comando retorna exit code 0. O docker
+  # compose imprime status de progresso no stderr por design ('
+  # Container zap  Restarting'), o que reproduzivelmente disparava
+  # a falha. Solucao: rebaixar temporariamente para 'Continue',
+  # descartar ambos os streams, e checar o exit code manualmente.
+  $prevPref = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    docker compose restart juice-shop zap *>$null
+    if ($LASTEXITCODE -ne 0) {
+      throw "docker compose restart falhou (exit $LASTEXITCODE)"
+    }
+  } finally {
+    $ErrorActionPreference = $prevPref
+  }
+  # [void] descarta o valor de retorno booleano da funcao, que caso
+  # contrario vazaria para o pipeline e imprimiria 'True' no console.
+  [void](Wait-ContainerHealthy -Name "zap" -TimeoutS $ZAP_HEALTH_TIMEOUT_S)
+  # juice-shop nao tem healthcheck no docker-compose.yml — o Docker
+  # nunca marca 'healthy'. Depois de 10s de tentativa, aceita como
+  # up e segue (nossa integracao real com o juice-shop testa ele
+  # dentro do proprio cenario).
+  try { [void](Wait-ContainerHealthy -Name "juice-shop" -TimeoutS 10) } catch { Start-Sleep -Seconds 5 }
 }
 
 # ---------------------------------------------------------------
@@ -111,11 +130,13 @@ function Get-NewestReportFile {
     "D" { "scenario-d-*.json" }
     default { throw "Cenario desconhecido: $Scenario" }
   }
-  $matches = Get-ChildItem -Path $REPORTS_DIR -Filter $pattern -File `
+  $found = Get-ChildItem -Path $REPORTS_DIR -Filter $pattern -File `
     | Where-Object { $_.LastWriteTime -ge $Since } `
     | Sort-Object LastWriteTime -Descending
-  if ($matches.Count -eq 0) { return $null }
-  return $matches[0].Name
+  if (-not $found) { return $null }
+  # Forca array pra evitar desembrulho de item unico em PS 5.1
+  $arr = @($found)
+  return $arr[0].Name
 }
 
 function Get-FindingsCount {
@@ -214,15 +235,17 @@ function Append-Row {
 # ---------------------------------------------------------------
 function Build-Plan {
   param([hashtable]$Completed)
-  $plan = @()
+  $plan = New-Object System.Collections.ArrayList
   for ($i = 1; $i -le $N; $i++) {
     foreach ($s in $Scenarios) {
       if ($Completed[$s] -lt $i) {
-        $plan += [pscustomobject]@{ RunIndex = $i; Scenario = $s }
+        [void]$plan.Add([pscustomobject]@{ RunIndex = $i; Scenario = $s })
       }
     }
   }
-  return $plan
+  # Devolve como array 'gordo' (,) para o PS 5.1 nao desembrulhar
+  # quando ha 1 elemento, o que quebraria .Count e o loop de indice.
+  return ,@($plan.ToArray())
 }
 
 # ---------------------------------------------------------------
@@ -246,13 +269,15 @@ try {
     return
   }
 
-  Write-Info "Runs pendentes: $($plan.Count)"
+  $planTotal = $plan.Count
+  Write-Info "Runs pendentes: $planTotal"
   $totalStart = Get-Date
 
-  foreach ($step in $plan) {
+  for ($idx = 0; $idx -lt $planTotal; $idx++) {
+    $step = $plan[$idx]
     $i = $step.RunIndex
     $s = $step.Scenario
-    Write-Step "[$($plan.IndexOf($step)+1)/$($plan.Count)] Cenario $s - run $i/$N"
+    Write-Step "[$($idx+1)/$planTotal] Cenario $s - run $i/$N"
 
     # 1. Reset de containers para estado limpo
     try {
