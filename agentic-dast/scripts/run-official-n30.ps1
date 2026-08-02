@@ -112,10 +112,12 @@ function Reset-Environment {
   # contrario vazaria para o pipeline e imprimiria 'True' no console.
   [void](Wait-ContainerHealthy -Name "zap" -TimeoutS $ZAP_HEALTH_TIMEOUT_S)
   # juice-shop nao tem healthcheck no docker-compose.yml — o Docker
-  # nunca marca 'healthy'. Depois de 10s de tentativa, aceita como
-  # up e segue (nossa integracao real com o juice-shop testa ele
-  # dentro do proprio cenario).
-  try { [void](Wait-ContainerHealthy -Name "juice-shop" -TimeoutS 10) } catch { Start-Sleep -Seconds 5 }
+  # nunca marca 'healthy'. Wait-ContainerHealthy vai atingir timeout;
+  # aceitamos isso silenciosamente e damos 10s adicionais para settle
+  # completo (banco recarregado, listeners prontos). Antes eram 5s e
+  # observamos o LLM as vezes bater no juice-shop cedo demais e receber
+  # 502 na primeira request, disparando o circuit breaker sem motivo.
+  try { [void](Wait-ContainerHealthy -Name "juice-shop" -TimeoutS 30) } catch { Start-Sleep -Seconds 10 }
 }
 
 # ---------------------------------------------------------------
@@ -166,12 +168,19 @@ function Invoke-Scenario {
     $start  = Get-Date
 
     # captura stdout+stderr para inspecionar erros de rate limit sem
-    # perder visibilidade em tempo real
+    # perder visibilidade em tempo real. Precaucao ja conhecida do
+    # PS 5.1: com ErrorActionPreference=Stop, cada linha de stderr
+    # de exe nativo vira NativeCommandError fatal. O 'npm run' emite
+    # DeprecationWarning do Node no stderr (inofensivo) — sem essa
+    # tratativa, aborta antes mesmo do cenario executar.
     $tmp = New-TemporaryFile
+    $prevPref = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
       & npm.cmd run $target 2>&1 | Tee-Object -FilePath $tmp.FullName
       $exit = $LASTEXITCODE
     } finally {
+      $ErrorActionPreference = $prevPref
       $output = if (Test-Path $tmp.FullName) { Get-Content -Raw $tmp.FullName } else { "" }
       Remove-Item -Force $tmp.FullName -ErrorAction SilentlyContinue
     }

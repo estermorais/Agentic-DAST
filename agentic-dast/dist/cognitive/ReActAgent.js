@@ -18,6 +18,7 @@ exports.ReActAgent = void 0;
 const config_1 = require("../config");
 const prompts_1 = require("./prompts");
 const LLMClient_1 = require("./LLMClient");
+const HttpClient_1 = require("../executor/abilities/HttpClient");
 class ReActAgent {
     llm;
     dispatcher;
@@ -127,6 +128,23 @@ class ReActAgent {
                 observation,
                 timestamp: new Date(),
             });
+            // 6b. Circuit breaker: se o HttpClient abriu o breaker (alvo caiu
+            // apos N falhas consecutivas), nao adianta continuar iterando —
+            // cada iteracao adicional so gasta tokens contra um servidor que
+            // nao vai voltar dentro deste run. Encerra graciosamente aqui.
+            if (observation.includes(HttpClient_1.TARGET_DOWN_MARKER)) {
+                console.warn(`[Cognitivo] TARGET_DOWN_MARKER detectado. Encerrando loop cedo ` +
+                    `para nao gastar tokens contra alvo indisponivel.`);
+                return {
+                    findings: this.dispatcher.getFindings(),
+                    steps,
+                    totalIterations: i,
+                    finishedCleanly: false,
+                    summary: `Alvo indisponivel mid-run (juice-shop caiu apos ${i} iteracoes). ` +
+                        `Circuit breaker aberto no HttpClient. Findings coletados antes da ` +
+                        `queda foram preservados. Marque este run como parcial no analise.`,
+                };
+            }
             // 7. Adiciona a Observation ao histórico para a próxima iteração
             this.conversationHistory.push({
                 role: 'user',
@@ -174,15 +192,24 @@ class ReActAgent {
                     .trim()
                     .replace(/```json\n?/g, '')
                     .replace(/```\n?/g, '');
-                try {
-                    actionInput = JSON.parse(jsonText);
-                }
-                catch {
-                    // Tenta extrair JSON de dentro de backticks
-                    const innerJson = jsonText.match(/\{[\s\S]*\}/)?.[0];
-                    if (innerJson) {
-                        actionInput = JSON.parse(innerJson);
+                // Escalada em 3 niveis. Antes o parser tentava JSON.parse do
+                // texto inteiro e caia em cascata; agora fazemos brace-matching
+                // deterministico primeiro, o que resolve o caso mais comum de
+                // falha (finish com summary multi-linha contendo aspas nao
+                // escapadas ou o LLM continuar escrevendo depois do JSON).
+                const extracted = extractFirstJsonObject(jsonText);
+                if (extracted !== null) {
+                    try {
+                        actionInput = JSON.parse(extracted);
                     }
+                    catch {
+                        // Ultima tentativa: parse do texto completo. Se falhar
+                        // aqui, o parser retorna null e o loop pede reformatacao.
+                        actionInput = JSON.parse(jsonText);
+                    }
+                }
+                else {
+                    actionInput = JSON.parse(jsonText);
                 }
             }
             return {
@@ -197,4 +224,47 @@ class ReActAgent {
     }
 }
 exports.ReActAgent = ReActAgent;
+/**
+ * Extrai o primeiro objeto JSON balanceado do texto, respeitando
+ * aspas e escapes. Retorna null se nao encontrar objeto valido.
+ *
+ * Motivacao: o LLM as vezes emite JSON multi-linha longo (tipico do
+ * summary de finish) seguido de texto adicional ou terminando abrupto
+ * quando o max_tokens do LLM corta o output no meio. JSON.parse do
+ * texto todo quebra; brace-matching manual acha o primeiro '{...}'
+ * completo e ignora o resto.
+ */
+function extractFirstJsonObject(text) {
+    const start = text.indexOf('{');
+    if (start < 0)
+        return null;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = start; i < text.length; i++) {
+        const ch = text[i];
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (ch === '\\') {
+            escape = true;
+            continue;
+        }
+        if (ch === '"') {
+            inString = !inString;
+            continue;
+        }
+        if (inString)
+            continue;
+        if (ch === '{')
+            depth++;
+        else if (ch === '}') {
+            depth--;
+            if (depth === 0)
+                return text.substring(start, i + 1);
+        }
+    }
+    return null; // objeto nao fechado (LLM truncou)
+}
 //# sourceMappingURL=ReActAgent.js.map
