@@ -67,7 +67,26 @@ class OpenRouterClient implements LLMClient {
           model: this.model,
           max_tokens: 2048,
           messages: [
-            { role: 'system', content: systemPrompt },
+            // Prompt Caching estilo Anthropic via OpenRouter: o campo
+            // 'content' de string vira array de blocos com cache_control
+            // ephemeral no primeiro. O system prompt (~10k tokens, 677
+            // linhas em prompts.ts) e imutavel entre as ~25-40 iteracoes
+            // do ReAct — cachea-lo economiza ~70-90% do custo total do
+            // Cenario C. Sem esse header o system era faturado
+            // integralmente a cada iteracao.
+            //
+            // Docs: https://openrouter.ai/docs/features/prompt-caching
+            //       https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+            {
+              role: 'system',
+              content: [
+                {
+                  type: 'text',
+                  text: systemPrompt,
+                  cache_control: { type: 'ephemeral' },
+                },
+              ],
+            },
             ...history,
           ],
         },
@@ -97,6 +116,32 @@ class OpenRouterClient implements LLMClient {
           `OpenRouter retornou resposta inesperada: ${JSON.stringify(response.data).substring(0, 500)}`,
         );
       }
+
+      // Telemetria de custo por chamada — instrumentacao para diagnosticar
+      // se o prompt caching esta funcionando via OpenRouter. Precos de
+      // referencia (anthropic/claude-haiku-4.5 no OpenRouter, USD/MTok):
+      //   input regular : 1.00
+      //   cache write   : 1.25 (default_write nao vem explicito na resposta)
+      //   cache read    : 0.10 (~90% de desconto sobre input regular)
+      //   output        : 5.00
+      const usage = response.data?.usage;
+      if (usage) {
+        const inputTotal   = usage.prompt_tokens ?? 0;
+        const cacheRead    = usage.prompt_tokens_details?.cached_tokens ?? 0;
+        const cacheWrite   = usage.prompt_tokens_details?.cache_creation_input_tokens ?? 0;
+        const inputRegular = Math.max(0, inputTotal - cacheRead - cacheWrite);
+        const output       = usage.completion_tokens ?? 0;
+        const costUSD =
+          (inputRegular * 1.00 + cacheWrite * 1.25 + cacheRead * 0.10 + output * 5.00) / 1_000_000;
+
+        const cacheHit = inputTotal > 0 ? (cacheRead / inputTotal * 100).toFixed(0) : '0';
+        console.log(
+          `  [LLM] input=${inputTotal} (cache_read=${cacheRead}/${cacheHit}%, ` +
+          `cache_write=${cacheWrite}, regular=${inputRegular}) ` +
+          `output=${output} custo≈$${costUSD.toFixed(4)}`
+        );
+      }
+
       return content;
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
