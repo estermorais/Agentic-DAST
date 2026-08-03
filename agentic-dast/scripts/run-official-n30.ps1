@@ -274,6 +274,27 @@ function Build-Plan {
 # Main
 # ---------------------------------------------------------------
 Push-Location $AGENTIC_DIR
+
+# Start-Transcript preserva TODO o output do terminal (linhas [LLM] com
+# custo por chamada, warnings do runner, mensagens de erro) em arquivo
+# .log timestampado. Sem isso o output do console e efemero e se perde
+# quando a janela fecha, impossibilitando analise pos-hoc de custo por
+# run, cache hit rate ou falhas.
+#
+# Try/Catch defensivo: se ja houver transcript ativo (usuario ja
+# chamou Start-Transcript manualmente antes), tenta continuar naquele
+# arquivo em vez de falhar.
+$transcriptStamp = Get-Date -Format "yyyyMMddHHmmss"
+$transcriptFile = Join-Path (Split-Path -Parent $LOG_CSV) "_run-transcript-$($Scenarios -join '')-$transcriptStamp.log"
+$transcriptStarted = $false
+try {
+  Start-Transcript -Path $transcriptFile -Append -IncludeInvocationHeader | Out-Null
+  $transcriptStarted = $true
+  Write-Info "Transcript ativo em: $transcriptFile"
+} catch {
+  Write-Warn "Nao foi possivel iniciar transcript (pode ja haver um ativo): $($_.Exception.Message)"
+}
+
 try {
   Write-Step "AGENTIC DAST - Rodada oficial (N=$N, cenarios=$($Scenarios -join ','))"
 
@@ -336,4 +357,10 @@ try {
 
 } finally {
   Pop-Location
+  # Fecha o transcript se conseguimos iniciar um (arquivo .log fica salvo).
+  # Try/catch defensivo: Stop-Transcript falha se ja foi parado por outra
+  # via, mas nao queremos que isso afete o exit code do runner.
+  if ($transcriptStarted) {
+    try { Stop-Transcript | Out-Null } catch { }
+  }
 }
