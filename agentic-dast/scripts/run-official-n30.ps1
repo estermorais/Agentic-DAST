@@ -186,7 +186,20 @@ function Invoke-Scenario {
     }
 
     $duration = ((Get-Date) - $start).TotalSeconds
-    $rateLimited = ($output -match "rate.?limit|429|quota exceeded|too many requests|AgentAuthError")
+
+    # Rate-limit detection precisa ser conservadora: o regex generico
+    # 'rate.?limit' antes disparava em qualquer mencao textual (inclusive
+    # o LLM discutindo 'considerar rate limit no design' no proprio
+    # summary), gerando 3 falsos positivos no run oficial do C que
+    # tiveram que ser reclassificados manualmente depois.
+    #
+    # Nova regra: so considera rate-limited se o run tambem falhou.
+    # Rate limit real do OpenRouter/Claude Code retorna exit != 0 ou
+    # dura muito pouco (< 60s, tempo de bater no rate limit e sair);
+    # mencoes de rate limit em runs bem sucedidos (exit == 0 E > 60s)
+    # sao apenas texto de LLM, nao devem disparar retry.
+    $rateLimitedText = ($output -match "rate.?limit|429|quota exceeded|too many requests|AgentAuthError")
+    $rateLimited = $rateLimitedText -and ($exit -ne 0 -or $duration -lt 60)
 
     if ($exit -eq 0 -and -not $rateLimited) {
       return @{ Duration = $duration; Since = $start }
