@@ -98,29 +98,35 @@ export function classify(
     // Normalizado diacritic-insensitive: 'administracao' == 'administração'.
     const text = normalize(`${finding.title} ${finding.description} ${finding.evidence ?? ''}`);
 
-    // Procura uma entrada GT compativel e ainda nao casada.
+    // Procura entradas GT compativeis (multi-match — um finding pode
+    // revelar mais de uma vuln simultaneamente, especialmente quando
+    // expoe endpoint que combina categorias, como GET /api/Users que
+    // e tanto Broken Access Control quanto Sensitive Data Exposure).
     //
-    // Regras de match (em ordem):
-    //   a) mesma categoria canonica
+    // Regras de match:
+    //   a) MESMA categoria canonica → sempre aceito
+    //      OU CROSS-category se casou keyword muito especifica → aceito
     //   b) pelo menos uma keyword do GT no texto
-    //   c) endpointHint: obrigatorio SE nenhuma das keywords que casaram
-    //      for "especifica" (>= 12 chars). Isso pega dois casos:
-    //      - keywords especificas ('zero estrela', 'negative quantity',
-    //        'application-configuration') sao unicas o suficiente para
-    //        identificar a vuln sem exigir endpointHint
-    //      - keywords curtas/genericas ('admin', 'ftp', 'xss') podem
-    //        casar com varias vulns; hint continua obrigatorio como
-    //        desambiguador
+    //   c) endpointHint: obrigatorio SE nenhuma das keywords for
+    //      "especifica" (>= 12 chars).
     //
-    //      Motivacao: o AbuseZeroStarReview detectava GT-BLV-02 mas o
-    //      evidence (JSON de response) nao mencionava 'feedbacks' —
-    //      o hint impedia o TP mesmo com a keyword 'zero estrela'
-    //      casando. Threshold de 12 chars evita false positives.
+    // Threshold de 12 chars ('zero estrela', 'user enumeration',
+    // 'listagem de usuarios') e restritivo o bastante para evitar
+    // false positives de keywords curtas/ambiguas ('admin', 'ftp',
+    // 'xss', 'jwt', 'sqli' etc.).
+    //
+    // Motivacao empirica:
+    //   - GT-BLV-02 (Zero Stars): AbuseZeroStarReview detectava, mas
+    //     evidence (JSON response) nao mencionava 'feedbacks' — hint
+    //     rigido rejeitava.
+    //   - GT-SDE-03 (Exposed User List): AbuseAdminRoute e varios
+    //     findings ReAct expunham /api/Users com listagem completa,
+    //     mas ficavam classificados como Broken Access Control, nao
+    //     como Sensitive Data Exposure — categoria rigida rejeitava.
     const SPECIFIC_KEYWORD_MIN_LENGTH = 12;
 
-    const candidate = groundTruth.find((gt) => {
+    const candidates = groundTruth.filter((gt) => {
       if (matchedGtIds.has(gt.id)) return false;
-      if (gt.category !== inferredCategory) return false;
       const matchedKeywords = gt.detectionKeywords.filter((kw) =>
         text.includes(normalize(kw)),
       );
@@ -129,19 +135,29 @@ export function classify(
       const hasSpecificMatch = matchedKeywords.some(
         (kw) => kw.length >= SPECIFIC_KEYWORD_MIN_LENGTH,
       );
+
+      // Regra de categoria: mesmo canonico OU cross-category se
+      // keyword especifica bateu.
+      if (gt.category !== inferredCategory && !hasSpecificMatch) {
+        return false;
+      }
+
+      // Regra de hint: obrigatorio se nenhuma keyword especifica bateu.
       if (gt.endpointHint && !hasSpecificMatch && !text.includes(normalize(gt.endpointHint))) {
         return false;
       }
       return true;
     });
 
-    if (candidate) {
-      matchedGtIds.add(candidate.id);
-      truePositives.push({
-        finding,
-        inferredCategory,
-        matchedGtId: candidate.id,
-      });
+    if (candidates.length > 0) {
+      for (const candidate of candidates) {
+        matchedGtIds.add(candidate.id);
+        truePositives.push({
+          finding,
+          inferredCategory,
+          matchedGtId: candidate.id,
+        });
+      }
     } else {
       falsePositives.push({
         finding,
