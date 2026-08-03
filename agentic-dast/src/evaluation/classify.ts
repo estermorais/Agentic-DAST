@@ -99,18 +99,37 @@ export function classify(
     const text = normalize(`${finding.title} ${finding.description} ${finding.evidence ?? ''}`);
 
     // Procura uma entrada GT compativel e ainda nao casada.
-    // Match precisa satisfazer:
+    //
+    // Regras de match (em ordem):
     //   a) mesma categoria canonica
     //   b) pelo menos uma keyword do GT no texto
-    //   c) se o GT tem endpointHint, ele tambem precisa aparecer no
-    //      texto (evita over-matching entre vulns da mesma categoria
-    //      em endpoints diferentes)
+    //   c) endpointHint: obrigatorio SE nenhuma das keywords que casaram
+    //      for "especifica" (>= 12 chars). Isso pega dois casos:
+    //      - keywords especificas ('zero estrela', 'negative quantity',
+    //        'application-configuration') sao unicas o suficiente para
+    //        identificar a vuln sem exigir endpointHint
+    //      - keywords curtas/genericas ('admin', 'ftp', 'xss') podem
+    //        casar com varias vulns; hint continua obrigatorio como
+    //        desambiguador
+    //
+    //      Motivacao: o AbuseZeroStarReview detectava GT-BLV-02 mas o
+    //      evidence (JSON de response) nao mencionava 'feedbacks' —
+    //      o hint impedia o TP mesmo com a keyword 'zero estrela'
+    //      casando. Threshold de 12 chars evita false positives.
+    const SPECIFIC_KEYWORD_MIN_LENGTH = 12;
+
     const candidate = groundTruth.find((gt) => {
       if (matchedGtIds.has(gt.id)) return false;
       if (gt.category !== inferredCategory) return false;
-      const kwMatch = gt.detectionKeywords.some((kw) => text.includes(normalize(kw)));
-      if (!kwMatch) return false;
-      if (gt.endpointHint && !text.includes(normalize(gt.endpointHint))) {
+      const matchedKeywords = gt.detectionKeywords.filter((kw) =>
+        text.includes(normalize(kw)),
+      );
+      if (matchedKeywords.length === 0) return false;
+
+      const hasSpecificMatch = matchedKeywords.some(
+        (kw) => kw.length >= SPECIFIC_KEYWORD_MIN_LENGTH,
+      );
+      if (gt.endpointHint && !hasSpecificMatch && !text.includes(normalize(gt.endpointHint))) {
         return false;
       }
       return true;
