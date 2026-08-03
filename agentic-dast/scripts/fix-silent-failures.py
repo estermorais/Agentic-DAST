@@ -37,7 +37,18 @@ ARCHIVE_DIR = REPORTS_DIR / "_archive"
 
 
 def is_silent_failure(row: dict) -> bool:
-    """Regra: D com dur < 20s E findings == 0 e falha de rate limit."""
+    """Detecta rate limit disfarcado de sucesso no Cenario D.
+
+    Runs bem sucedidos do D duram 130-520s e produzem 3-8 findings.
+    Runs com rate limit do Claude Pro se enquadram em uma dessas duas
+    assinaturas:
+      1. Aborta cedo total: dur < 20s E findings == 0 (fail explicito
+         do agente sem produzir summary util).
+      2. Aborta cedo parcial: dur < 90s E findings <= 1 (rate limit no
+         meio do primeiro attempt, agente registra um finding trivial
+         mas nao chega a explorar). Foi o caso do run 4 na rodada
+         oficial: dur=51.6s findings=1.
+    """
     if row["scenario"] != "D":
         return False
     try:
@@ -45,7 +56,13 @@ def is_silent_failure(row: dict) -> bool:
         findings = int(row["findings"])
     except (ValueError, KeyError):
         return False
-    return dur < 20 and findings == 0
+    # Assinatura 1: aborta imediato
+    if dur < 20 and findings == 0:
+        return True
+    # Assinatura 2: aborta apos primeiro attempt (~60-90s), 0 ou 1 finding
+    if dur < 90 and findings <= 1:
+        return True
+    return False
 
 
 def main() -> int:
