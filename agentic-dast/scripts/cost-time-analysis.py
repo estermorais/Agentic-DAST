@@ -261,7 +261,7 @@ def main():
         "font.family": "serif", "font.size": 11,
         "axes.grid": True, "grid.alpha": 0.3,
         "axes.spines.top": False, "axes.spines.right": False,
-        "figure.dpi": 150, "savefig.dpi": 300, "savefig.bbox": "tight",
+        "figure.dpi": 120, "savefig.dpi": 150, "savefig.bbox": "tight",
     })
     scen_colors = {"A": "#0072B2", "B": "#56B4E9", "C": "#009E73", "D": "#D55E00"}
     scen_labels = {

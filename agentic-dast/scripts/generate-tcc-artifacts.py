@@ -231,8 +231,8 @@ plt.rcParams.update({
     "grid.alpha": 0.3,
     "axes.spines.top": False,
     "axes.spines.right": False,
-    "figure.dpi": 150,
-    "savefig.dpi": 300,
+    "figure.dpi": 120,
+    "savefig.dpi": 150,
     "savefig.bbox": "tight",
 })
 
@@ -577,10 +577,11 @@ def main():
     plot_heatmap_detection(cov, OUT / "heatmap-detection.png")
     print(f"       -> {OUT / 'heatmap-detection.png'}")
 
-    print("[gen] documento resumo markdown...")
-    md = gen_markdown_summary(summary, cov)
-    (OUT / "resumo.md").write_text(md, encoding="utf-8")
-    print(f"       -> {OUT / 'resumo.md'}")
+    # NOTA: resumo.md NAO e mais regerado automaticamente. A versao
+    # atual em disco foi humanizada manualmente para uso em anexos e
+    # documentacao para o orientador. Se precisar de uma versao
+    # sintetica atualizada com metricas do CSV, gere manualmente.
+    print("[gen] resumo.md preservado (regeneracao desabilitada).")
 
     print("\n[gen] pronto. artefatos em:", OUT)
 
