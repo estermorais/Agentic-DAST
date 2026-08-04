@@ -13,8 +13,12 @@ node_modules/
 *.d.ts
 *.d.ts.map
 
-# Relatórios gerados pelo agente
-agentic-dast/reports/
+# Relatórios gerados pelo agente (JSONs individuais, transcripts, backups)
+agentic-dast/reports/*
+# Exceções: artefatos consolidados e log oficial da rodada n=30 SÃO versionados
+!agentic-dast/reports/tcc-artifacts/
+!agentic-dast/reports/_run-log.csv
+!agentic-dast/reports/_evaluation-summary.json
 
 # Logs
 *.log
