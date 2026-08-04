@@ -96,6 +96,13 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
     gt = cov["gt"]
     ngt = len(gt)
 
+    # Helper de formatacao numerica em portugues brasileiro (virgula decimal)
+    def n(x, digits=3):
+        return f"{x:.{digits}f}".replace(".", ",")
+
+    # Rodape padrao para todas as tabelas (NBR 6023:2018 exige fonte).
+    LEGEND = r"\legend{Fonte: Elaborado pela autora (2026).}"
+
     def cov_pct(s):
         return len(matched[s]) * 100 / ngt
 
@@ -126,16 +133,16 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
         suffix = "}" if s == "C" else ""
         latex += (f"{prefix}{label}{suffix} & "
                   f"{prefix}{a['runs']}{suffix} & "
-                  f"{prefix}{a['meanPrec']:.3f}{suffix} & "
-                  f"{prefix}{a['meanRecall']:.3f}{suffix} & "
-                  f"{prefix}{a['meanF1']:.3f}{suffix} & "
-                  f"{prefix}{a['stdevF1']:.3f}{suffix} & "
+                  f"{prefix}{n(a['meanPrec'])}{suffix} & "
+                  f"{prefix}{n(a['meanRecall'])}{suffix} & "
+                  f"{prefix}{n(a['meanF1'])}{suffix} & "
+                  f"{prefix}{n(a['stdevF1'])}{suffix} & "
                   f"{prefix}{len(matched[s])}/{ngt} ({cov_pct(s):.0f}\\%){suffix} \\\\\n")
-    latex += r"""\bottomrule
-\end{tabular}
-\end{table}
-
-% --- Tabela 2: Cobertura por categoria (Cenario C) ------------
+    latex += r"\bottomrule" + "\n"
+    latex += r"\end{tabular}" + "\n"
+    latex += LEGEND + "\n"
+    latex += r"\end{table}" + "\n\n"
+    latex += r"""% --- Tabela 2: Cobertura por categoria (Cenario C) ------------
 \begin{table}[htbp]
 \centering
 \caption{Cobertura por categoria OWASP no Cenário C (Agentic DAST proposto)}
@@ -164,11 +171,11 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
         hit = sum(1 for i in ids if i in c_ids)
         pct = hit * 100 // len(ids) if ids else 0
         latex += f"{cat_display[cat]} & {hit}/{len(ids)} & {pct}\\% \\\\\n"
-    latex += r"""\bottomrule
-\end{tabular}
-\end{table}
-
-% --- Tabela 3: Comparativo C vs D (dominancia) ----------------
+    latex += r"\bottomrule" + "\n"
+    latex += r"\end{tabular}" + "\n"
+    latex += LEGEND + "\n"
+    latex += r"\end{table}" + "\n\n"
+    latex += r"""% --- Tabela 3: Comparativo C vs D (dominancia) ----------------
 \begin{table}[htbp]
 \centering
 \caption{Análise comparativa entre o framework proposto (C) e o baseline estado-da-arte (D)}
@@ -182,16 +189,16 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
     d_agg = agg_by_scen["D"]
     def pct_gain(c, d): return (c - d) / d * 100 if d > 0 else float("inf")
 
-    latex += f"F1 & {c_agg['meanF1']:.3f} & {d_agg['meanF1']:.3f} & +{pct_gain(c_agg['meanF1'], d_agg['meanF1']):.0f}\\% \\\\\n"
-    latex += f"Precisão & {c_agg['meanPrec']:.3f} & {d_agg['meanPrec']:.3f} & +{pct_gain(c_agg['meanPrec'], d_agg['meanPrec']):.0f}\\% \\\\\n"
-    latex += f"Recall & {c_agg['meanRecall']:.3f} & {d_agg['meanRecall']:.3f} & +{pct_gain(c_agg['meanRecall'], d_agg['meanRecall']):.0f}\\% \\\\\n"
+    latex += f"F1 & {n(c_agg['meanF1'])} & {n(d_agg['meanF1'])} & +{pct_gain(c_agg['meanF1'], d_agg['meanF1']):.0f}\\% \\\\\n"
+    latex += f"Precisão & {n(c_agg['meanPrec'])} & {n(d_agg['meanPrec'])} & +{pct_gain(c_agg['meanPrec'], d_agg['meanPrec']):.0f}\\% \\\\\n"
+    latex += f"Recall & {n(c_agg['meanRecall'])} & {n(d_agg['meanRecall'])} & +{pct_gain(c_agg['meanRecall'], d_agg['meanRecall']):.0f}\\% \\\\\n"
     latex += f"Cobertura acumulada & {len(matched['C'])}/19 & {len(matched['D'])}/19 & +{len(matched['C'])-len(matched['D'])} vulns \\\\\n"
-    latex += f"Desvio padrão de F1 & {c_agg['stdevF1']:.3f} & {d_agg['stdevF1']:.3f} & --{(d_agg['stdevF1']-c_agg['stdevF1'])/d_agg['stdevF1']*100:.0f}\\% \\\\\n"
-    latex += r"""\bottomrule
-\end{tabular}
-\end{table}
-
-% --- Tabela 4: Dominancia estrita (C superset de D) -----------
+    latex += f"Desvio padrão de F1 & {n(c_agg['stdevF1'])} & {n(d_agg['stdevF1'])} & --{(d_agg['stdevF1']-c_agg['stdevF1'])/d_agg['stdevF1']*100:.0f}\\% \\\\\n"
+    latex += r"\bottomrule" + "\n"
+    latex += r"\end{tabular}" + "\n"
+    latex += LEGEND + "\n"
+    latex += r"\end{table}" + "\n\n"
+    latex += r"""% --- Tabela 4: Dominancia estrita (C superset de D) -----------
 \begin{table}[htbp]
 \centering
 \caption{Análise de dominância: vulnerabilidades detectadas exclusivamente por cada cenário}
@@ -213,10 +220,10 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
     latex += f"Somente C detectou & {len(only_c)} & {fmt_ids(only_c)} \\\\\n"
     latex += f"Somente D detectou & {len(only_d)} & {fmt_ids(only_d)} \\\\\n"
     latex += f"Ambos detectaram & {len(both)} & {fmt_ids(both)} \\\\\n"
-    latex += r"""\bottomrule
-\end{tabular}
-\end{table}
-"""
+    latex += r"\bottomrule" + "\n"
+    latex += r"\end{tabular}" + "\n"
+    latex += LEGEND + "\n"
+    latex += r"\end{table}" + "\n"
     return latex
 
 
