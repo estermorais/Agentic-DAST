@@ -1,0 +1,26 @@
+% Tabelas custo-tempo geradas por cost-time-analysis.py
+
+\begin{table}[htbp]\centering
+\caption{Duração de execução por rodada, em segundos}
+\label{tab:duracao-rodadas}
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Cenário} & \textbf{$n$} & \textbf{Média} & \textbf{Mediana} & \textbf{Mín} & \textbf{Máx} & \textbf{Desvio} \\
+\midrule
+A & 30 & 345,0 & 343,0 & 167,5 & 385,5 & 37,2 \\
+B & 30 & 90,7 & 90,6 & 89,3 & 92,7 & 0,7 \\
+C & 30 & 397,3 & 387,6 & 68,8 & 799,6 & 163,2 \\
+D & 30 & 251,8 & 234,2 & 129,6 & 519,4 & 93,8 \\
+\bottomrule\end{tabular}\end{table}
+\begin{table}[htbp]\centering
+\caption{Custo estimado do Cenário C (Agentic DAST) com Claude Haiku 4.5}
+\label{tab:custo-c}
+\begin{tabular}{lr}
+\toprule
+\textbf{Métrica} & \textbf{Valor} \\
+\midrule
+Custo médio por rodada & US\$ 0,82 \\
+Custo total (30 rodadas) & US\$ 24,60 \\
+Vulnerabilidades únicas detectadas & 16 \\
+Custo por vulnerabilidade única & US\$ 1,54 \\
+\bottomrule\end{tabular}\end{table}
