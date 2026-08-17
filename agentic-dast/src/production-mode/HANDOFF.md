@@ -75,6 +75,72 @@ Documentação completa: [`README.md`](./README.md) neste diretório.
 
 ---
 
+## Escolha do LLM (decisão importante antes de rodar)
+
+O framework é agnóstico ao provedor de LLM. Suporta três configurações,
+escolhidas via variável de ambiente `LLM_PROVIDER`. **Antes de rodar
+contra qualquer sistema da empresa, defina qual usar em conjunto com o
+DPO/time de segurança**, porque a escolha afeta onde os dados do alvo
+vão trafegar.
+
+| Provider | `LLM_PROVIDER` | Modelo padrão | Custo | Onde os dados trafegam |
+|---|---|---|---|---|
+| **OpenRouter** (default) | `openrouter` | Claude Haiku 4.5 | ~US$ 0,82 por rodada | Sua máquina → OpenRouter (EUA) → Anthropic (EUA) |
+| **Anthropic direto** | `anthropic` | Claude Haiku 4.5 | ~US$ 0,82 por rodada | Sua máquina → Anthropic (EUA) |
+| **Ollama local** | `ollama` | Llama 3.1 / Qwen 2.5 (a definir) | Zero (compute local) | Nada sai da sua máquina |
+
+### Implicação de LGPD
+
+O CRM da empresa provavelmente contém dados pessoais de clientes
+brasileiros. Se rodar com `openrouter` ou `anthropic`, cada resposta
+`GET /api/leads`, `GET /api/contacts`, etc. **é enviada para servidores
+nos EUA** como parte do prompt do LLM. Isso configura transferência
+internacional de dados pessoais (art. 33 da LGPD) e precisa estar
+alinhado com o DPO da empresa.
+
+**Se essa aprovação não for possível**, use `LLM_PROVIDER=ollama`.
+Trade-off: modelos locais (Llama 3.1 8B, Qwen 2.5 14B) têm qualidade
+menor que o Claude Haiku 4.5 no raciocínio ReAct estruturado. Vão errar
+formato com mais frequência, entrar em loop com mais frequência e
+detectar menos vulnerabilidades. Ainda vale a pena se a alternativa é
+não rodar.
+
+### Configuração via `.env`
+
+**OpenRouter (default):**
+```env
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-...      # obter em openrouter.ai/keys
+LLM_MODEL=claude-haiku-4-5-20251001
+```
+
+**Anthropic direto:**
+```env
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...          # obter em console.anthropic.com
+LLM_MODEL=claude-haiku-4-5-20251001
+```
+
+**Ollama local (nada sai da máquina):**
+```env
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=qwen2.5:14b
+OLLAMA_HOST=http://localhost:11434
+```
+
+Requer Ollama instalado localmente (`ollama pull qwen2.5:14b`) e uma
+GPU decente (RTX 3060+) para performance razoável.
+
+### Custo estimado para o red team
+
+Se optarem por OpenRouter ou Anthropic, o consumo esperado por rodada
+`READ_ONLY=true` é **inferior a US$ 0,82** (menos ações executadas =
+menos tokens processados). Para 10 rodadas de avaliação inicial no
+CRM, orçar **US$ 10 em créditos** já cobre com folga. Custo pode ser
+compartilhado como despesa de projeto de segurança.
+
+---
+
 ## Limitações que o red team precisa conhecer
 
 Cinco pontos que o módulo `production-mode` NÃO resolve:
@@ -208,6 +274,11 @@ ou do produto não será mencionado.
 ## Checklist final antes de rodar em produção
 
 - [ ] Autorização escrita do responsável pelo alvo (interno da empresa)
+- [ ] **Provedor de LLM escolhido em alinhamento com DPO** (OpenRouter/
+      Anthropic exigem aprovação para transferência internacional de
+      dados; Ollama local não exige)
+- [ ] **Chave de API do provedor obtida e configurada no `.env`** (ou
+      Ollama servindo modelo local)
 - [ ] Alvo confirmado no `.env` (`TARGET_URL` visto por 2 pessoas)
 - [ ] Time de operação/SOC avisado do horário e IP de origem
 - [ ] Snapshot do banco (se aplicável)
