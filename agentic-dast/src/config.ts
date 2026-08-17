@@ -23,7 +23,7 @@ function optional(key: string, defaultValue: string): string {
 
 // Provedor de LLM
 const llmProvider = optional('LLM_PROVIDER', 'openrouter') as
-  'anthropic' | 'ollama' | 'openrouter';
+  'anthropic' | 'ollama' | 'openrouter' | 'claude-cli';
 
 // Variaveis pre-computadas usadas em campos derivados abaixo.
 const _targetUrl    = optional('TARGET_URL', 'http://localhost:3000');

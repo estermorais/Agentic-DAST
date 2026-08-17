@@ -261,6 +261,87 @@ class OllamaClient implements LLMClient {
 }
 
 // ===========================================================
+// Claude Code CLI (usa assinatura Claude Pro autenticada via OAuth)
+// ===========================================================
+
+/**
+ * Cliente que invoca o Claude Code CLI local via subprocess. Nao
+ * consome API key comprada — usa a assinatura Claude Pro autenticada
+ * previamente no CLI (`claude login`). Adicionado para permitir que
+ * o red team execute o framework sem custo adicional de creditos.
+ *
+ * Trade-offs importantes:
+ *   - Rate limit da assinatura Pro pode bater durante rodadas longas.
+ *   - Cada iteracao spawna um subprocess (overhead ~1s versus API REST).
+ *   - Prompt caching Anthropic-style nao funciona por este canal.
+ *   - Para dados comparaveis cientificamente com a rodada oficial n=30
+ *     do TCC 2, use LLM_MODEL=claude-haiku-4-5-20251001 (mesmo modelo).
+ *     Outros modelos (Sonnet, Opus) sao aceitos mas mudam o objeto de
+ *     estudo — o desempenho medido reflete o modelo escolhido, nao o
+ *     mesmo LLM que gerou os resultados publicados do TCC.
+ */
+class ClaudeCliClient implements LLMClient {
+  readonly name: string;
+  private readonly model: string;
+
+  constructor() {
+    this.model = config.llmModel;
+    this.name  = `claude-cli/${this.model}`;
+  }
+
+  async chat(systemPrompt: string, history: ChatMessage[]): Promise<string> {
+    // O CLI aceita um unico prompt; concatenamos system + historico em
+    // um bloco monolitico marcando os papeis com prefixos textuais que
+    // o modelo reconhece pela convencao ChatML-like.
+    const parts: string[] = [];
+    parts.push(`SYSTEM:\n${systemPrompt}\n`);
+    for (const msg of history) {
+      const label = msg.role === 'user' ? 'USER' : 'ASSISTANT';
+      parts.push(`${label}:\n${msg.content}\n`);
+    }
+    parts.push('ASSISTANT:\n');
+    const fullPrompt = parts.join('\n');
+
+    // Invoca o CLI. Requer `claude` no PATH e login OAuth previo.
+    const { spawn } = await import('child_process');
+    return new Promise<string>((resolve, reject) => {
+      const proc = spawn(
+        'claude',
+        ['-p', '--model', this.model, '--output-format', 'text'],
+        { stdio: ['pipe', 'pipe', 'pipe'] },
+      );
+
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+      proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+      proc.on('error', (err) => {
+        reject(new Error(
+          `Falha ao invocar Claude Code CLI: ${err.message}. ` +
+          `Verifique que o binario 'claude' esta no PATH e que voce fez ` +
+          `login com 'claude login'.`,
+        ));
+      });
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(
+            `Claude Code CLI encerrou com codigo ${code}. stderr: ${stderr.substring(0, 500)}`,
+          ));
+          return;
+        }
+        resolve(stdout.trim());
+      });
+
+      // Envia o prompt via stdin
+      proc.stdin.write(fullPrompt);
+      proc.stdin.end();
+    });
+  }
+}
+
+// ===========================================================
 // Factory
 // ===========================================================
 
@@ -276,10 +357,12 @@ export function createLLMClient(): LLMClient {
       return new AnthropicClient();
     case 'ollama':
       return new OllamaClient();
+    case 'claude-cli':
+      return new ClaudeCliClient();
     default:
       throw new Error(
         `LLM_PROVIDER desconhecido: "${config.llmProvider}". ` +
-        `Use "openrouter", "anthropic" ou "ollama".`,
+        `Use "openrouter", "anthropic", "ollama" ou "claude-cli".`,
       );
   }
 }

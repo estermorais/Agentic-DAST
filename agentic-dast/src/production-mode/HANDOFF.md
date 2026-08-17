@@ -87,6 +87,7 @@ vão trafegar.
 |---|---|---|---|---|
 | **OpenRouter** (default) | `openrouter` | Claude Haiku 4.5 | ~US$ 0,82 por rodada | Sua máquina → OpenRouter (EUA) → Anthropic (EUA) |
 | **Anthropic direto** | `anthropic` | Claude Haiku 4.5 | ~US$ 0,82 por rodada | Sua máquina → Anthropic (EUA) |
+| **Claude Code CLI** | `claude-cli` | Configurável via `LLM_MODEL` | Zero (usa assinatura Claude Pro da empresa) | Sua máquina → Anthropic (EUA) |
 | **Ollama local** | `ollama` | Llama 3.1 / Qwen 2.5 (a definir) | Zero (compute local) | Nada sai da sua máquina |
 
 ### Implicação de LGPD
@@ -120,6 +121,39 @@ LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-...          # obter em console.anthropic.com
 LLM_MODEL=claude-haiku-4-5-20251001
 ```
+
+**Claude Code CLI (usa assinatura Pro da empresa, sem custo adicional):**
+```env
+LLM_PROVIDER=claude-cli
+LLM_MODEL=claude-haiku-4-5-20251001   # ver aviso científico abaixo
+```
+
+Pré-requisitos:
+- `claude` CLI instalado e disponível no PATH
+  ([code.claude.com/docs/en/install-claude-code](https://code.claude.com/docs/en/install-claude-code))
+- Login OAuth previamente feito com `claude login` usando a conta
+  Pro da empresa
+
+Trade-offs em relação ao OpenRouter/Anthropic:
+
+- **Rate limit do plano Pro** vai bater durante rodadas longas. Aconteceu
+  no Cenário D do TCC 2 e exigiu pausas e retomadas. O framework detecta
+  e reporta, mas o red team precisa estar pronto para esperar.
+- **Overhead de ~1s por iteração** (cada Action do agente vira um
+  `subprocess spawn`).
+- **Prompt caching Anthropic-style não funciona** por este canal, o que
+  em rodadas longas pode consumir mais quota do Pro do que o esperado.
+- **Cada invocação aparece nos logs de uso** da conta Pro.
+
+> ⚠️ **Aviso científico**: para que rodadas do red team possam alimentar
+> o estudo de generalização do artigo, o `LLM_MODEL` **deve ser
+> exatamente** `claude-haiku-4-5-20251001` (o mesmo do TCC 2). Se usarem
+> outro modelo (Sonnet, Opus), os dados servem como pentest interno mas
+> **não** como replicação científica direta — o desempenho medido
+> refletiria o modelo escolhido, não o mesmo LLM que gerou os resultados
+> publicados. A ideia do estudo é testar o **agente**, não o LLM
+> substituído. Deixe isto claro no CSV de audit para não confundir
+> análises futuras.
 
 **Ollama local (nada sai da máquina):**
 ```env
