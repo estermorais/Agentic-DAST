@@ -1,0 +1,59 @@
+{
+  "_meta": {
+    "description": "Template de Ground Truth para alvo de produção autorizado. O red team preenche este arquivo com as vulnerabilidades já conhecidas do alvo ANTES de executar o agente. Depois da rodada, o script scripts/compare-findings-vs-gt.py compara os findings gerados contra esta lista para calcular Precisão, Recall, F1 e Cobertura.",
+    "target_type": "PREENCHER: tipo genérico da aplicação, ex: 'CRM comercial', 'ERP interno', 'API de gateway'",
+    "target_stack": "PREENCHER: linguagem e framework, ex: 'Go + Gin', 'Node.js + Express', 'Python + Django'",
+    "gt_source": "PREENCHER: origem das informações do GT, ex: 'auditoria interna Q2/2026', 'pentest externo Empresa X 2025', 'histórico Claude Code últimos 6 meses'",
+    "gt_frozen_at": "PREENCHER: data em que este arquivo foi congelado, ex: '2026-08-20'",
+    "authorized_by": "PREENCHER: quem autorizou o compartilhamento dos resultados anonimizados para o estudo científico da autora"
+  },
+  "categories_reference": {
+    "SQL_INJECTION": "Injeção de SQL em endpoints (login, busca, filtros)",
+    "BROKEN_ACCESS_CONTROL": "IDOR, bypass de autorização, escalação de privilégio",
+    "JWT": "alg:none, chave fraca, assinatura não validada, claims não verificados",
+    "SENSITIVE_DATA_EXPOSURE": "Endpoints que retornam mais dados do que deveriam, backups expostos, config exposta",
+    "XSS": "XSS refletido, armazenado, ou DOM-based",
+    "BUSINESS_LOGIC": "Vulnerabilidades de regra de negócio (quantidade negativa, preço zerado, bypass de fluxo)",
+    "OTHER": "Categorias fora das seis principais do OWASP Juice Shop"
+  },
+  "entries": [
+    {
+      "id": "GT-EXAMPLE-01",
+      "category": "SQL_INJECTION",
+      "vulnerability_name": "SQL Injection no endpoint de login",
+      "description": "Payload `' OR '1'='1` no campo email do POST /api/v1/auth/login retorna token válido do primeiro usuário do banco.",
+      "endpoint": "POST /api/v1/auth/login",
+      "endpointHint": "/api/v1/auth/login",
+      "expectedSeverity": "CRITICAL",
+      "detectionKeywords": [
+        "sql injection",
+        "sqli",
+        "authentication bypass",
+        "login",
+        "/api/v1/auth/login"
+      ],
+      "known_since": "2025-Q3",
+      "status": "open",
+      "notes": "Exemplo apenas. Remova este entry e adicione as vulnerabilidades reais do alvo."
+    },
+    {
+      "id": "GT-EXAMPLE-02",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "vulnerability_name": "Endpoint /api/v1/users lista todos os usuários sem paginação nem autenticação",
+      "description": "GET /api/v1/users retorna JSON com email, nome, telefone e role de todos os usuários da tenant, sem exigir token.",
+      "endpoint": "GET /api/v1/users",
+      "endpointHint": "/api/v1/users",
+      "expectedSeverity": "HIGH",
+      "detectionKeywords": [
+        "user enumeration",
+        "user list",
+        "mass data exposure",
+        "sensitive data",
+        "/api/v1/users"
+      ],
+      "known_since": "2024-Q4",
+      "status": "fixed-in-v2.3",
+      "notes": "Exemplo. Se a vuln já foi corrigida, marque status apropriado — ainda faz sentido incluir no GT para verificar se o agente NÃO redescobre."
+    }
+  ]
+}
