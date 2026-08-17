@@ -7,9 +7,9 @@ oficiais (n=30 por cenario) e do CSV de log:
 
   reports/tcc-artifacts/
     tables.tex            Tabelas LaTeX prontas para \input{}
-    boxplot-f1.png        Box plot de F1 por cenario
-    barchart-coverage.png Barras horizontais de cobertura acumulada
-    heatmap-detection.png Heatmap frequencia de deteccao (GT x cenario)
+    violin-f1.pdf         Violin plot com swarm de F1 por cenario
+    barchart-coverage.pdf Barras horizontais de cobertura acumulada
+    heatmap-detection.pdf Heatmap frequencia de deteccao (GT x cenario)
     resumo.md             Documento consolidado em Markdown
 
 Uso:
@@ -25,6 +25,8 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import seaborn as sns
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORTS = ROOT / "reports"
@@ -121,11 +123,13 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
 \textbf{Cenário} & \textbf{n} & \textbf{Precisão} & \textbf{Recall} & \textbf{F1 (média)} & \textbf{F1 (desvio)} & \textbf{Cobertura} \\
 \midrule
 """
+    # Ordem A -> B -> D -> C: apresenta baselines antes, framework proposto
+    # como climax da comparacao (orientacao do orientador)
     rows = [
         ("A (ZAP puro)", "A"),
         ("B (ZAP + E2E)", "B"),
-        ("C (Agentic DAST)", "C"),
         ("D (PentestGPT)", "D"),
+        ("C (Agentic DAST)", "C"),
     ]
     for label, s in rows:
         a = agg_by_scen[s]
@@ -231,57 +235,90 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
 # Graficos
 # ==================================================================
 
+# Estilo grafico seguindo orientacao do orientador (baseado em Tufte):
+# - fontes serif Times para casar com templates IEEE/ACM
+# - grades sutis, sem molduras
+# - saida em PDF vetorial
+sns.set_theme(style="ticks")
 plt.rcParams.update({
     "font.family": "serif",
-    "font.size": 11,
-    "axes.grid": True,
-    "grid.alpha": 0.3,
+    "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+    "font.size": 10,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    "legend.fontsize": 9,
     "axes.spines.top": False,
     "axes.spines.right": False,
     "figure.dpi": 120,
-    "savefig.dpi": 150,
+    "savefig.dpi": 300,
     "savefig.bbox": "tight",
+    "savefig.format": "pdf",
 })
 
 
-def plot_boxplot_f1(summary: dict, out: Path):
-    """Box plot de F1 por cenario, mostrando a distribuicao completa."""
+def plot_violin_f1(summary: dict, out: Path):
+    """Violin plot de F1 por cenario com swarm plot sobreposto.
+
+    Substitui o boxplot anterior seguindo orientacao do orientador
+    (documento 'Orientacao Resultados Agentic DAST.pdf'). O violin
+    mostra a densidade da distribuicao alem dos quartis; o swarm
+    mostra cada uma das 30 rodadas como ponto individual. Media
+    marcada com losango branco. Salvo em PDF vetorial.
+    """
     agg_by_scen = {a["scenario"]: a for a in summary["aggregated"]}
-    scenarios = ["A", "B", "C", "D"]
-    data = [[m["f1"] for m in agg_by_scen[s]["individualMetrics"]] for s in scenarios]
+    scenarios = ["A", "B", "D", "C"]
 
-    fig, ax = plt.subplots(figsize=(9, 5))
-    bp = ax.boxplot(data, patch_artist=True, widths=0.5,
-                    medianprops=dict(color="black", linewidth=1.5),
-                    showmeans=True,
-                    meanprops=dict(marker="D", markerfacecolor="white",
-                                   markeredgecolor="black", markersize=7))
-    for patch, s in zip(bp["boxes"], scenarios):
-        patch.set_facecolor(SCEN_COLORS[s])
-        patch.set_alpha(0.75)
+    # DataFrame long-format para seaborn
+    rows = []
+    for s in scenarios:
+        for m in agg_by_scen[s]["individualMetrics"]:
+            rows.append({
+                "Cenário": SCEN_LABELS[s].replace("\n", " "),
+                "F1-score": m["f1"],
+            })
+    df = pd.DataFrame(rows)
 
-    ax.set_xticklabels([SCEN_LABELS[s] for s in scenarios])
-    ax.set_ylabel("F1-score", fontsize=12)
-    ax.set_title("Distribuição de F1-score por cenário experimental (n=30 cada)",
-                 fontsize=13, pad=15)
-    ax.set_ylim(-0.05, 1.0)
+    fig, ax = plt.subplots(figsize=(7, 4))
 
-    # Anotacoes de media
-    for i, s in enumerate(scenarios, 1):
+    palette = [SCEN_COLORS[s] for s in scenarios]
+    order = [SCEN_LABELS[s].replace("\n", " ") for s in scenarios]
+
+    sns.violinplot(
+        data=df, x="Cenário", y="F1-score",
+        order=order, hue="Cenário", palette=palette, hue_order=order,
+        inner="quartile", linewidth=0.8, cut=0, ax=ax,
+        alpha=0.55, legend=False,
+    )
+    sns.stripplot(
+        data=df, x="Cenário", y="F1-score",
+        order=order, color="black", alpha=0.5, size=3.0, jitter=0.15, ax=ax,
+    )
+
+    # Media por cenario (losango branco)
+    for i, s in enumerate(scenarios):
         mean_f1 = agg_by_scen[s]["meanF1"]
-        ax.text(i, mean_f1 + 0.04, f"μ={mean_f1:.3f}",
-                ha="center", fontsize=9, style="italic")
+        ax.scatter(i, mean_f1, marker="D", s=45,
+                   facecolor="white", edgecolor="black", linewidth=0.9, zorder=5)
+        ax.text(i, mean_f1 + 0.05, f"μ={mean_f1:.3f}",
+                ha="center", fontsize=8, style="italic")
 
-    plt.tight_layout()
-    plt.savefig(out)
-    plt.close()
+    ax.set_ylabel("F1-score")
+    ax.set_xlabel("")
+    ax.set_ylim(-0.05, 1.0)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    ax.set_axisbelow(True)
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    fig.savefig(out)
+    plt.close(fig)
 
 
 def plot_barchart_coverage(cov: dict, out: Path):
     """Barras horizontais empilhadas: cobertura acumulada por cenario e categoria."""
     matched = cov["matched"]
     gt = cov["gt"]
-    scenarios = ["A", "B", "C", "D"]
+    scenarios = ["A", "B", "D", "C"]
     labels = [SCEN_LABELS[s].replace("\n", " ") for s in scenarios]
 
     # Total absoluto e proporcional
@@ -355,7 +392,7 @@ def plot_heatmap_detection(cov: dict, out: Path):
     matched = cov["matched"]
     n = cov["n"]
     gt = cov["gt"]
-    scenarios = ["A", "B", "C", "D"]
+    scenarios = ["A", "B", "D", "C"]
 
     # Ordena GTs por categoria + id
     gt_sorted = sorted(gt, key=lambda e: (e["category"], e["id"]))
@@ -391,13 +428,89 @@ def plot_heatmap_detection(cov: dict, out: Path):
         prev_cat = e["category"]
 
     cbar = plt.colorbar(im, ax=ax, shrink=0.7, pad=0.02)
-    cbar.set_label("Frequência de detecção (%)", fontsize=10)
+    cbar.set_label("Frequência de detecção (%)")
     ax.set_title("Frequência de detecção por vulnerabilidade\n"
                  "(percentual de 30 execuções em que cada GT foi detectado)",
-                 fontsize=11, pad=15)
+                 fontsize=10, pad=15)
     plt.tight_layout()
     plt.savefig(out)
     plt.close()
+
+
+def plot_f1_por_categoria_ci(summary: dict, cov: dict, out: Path):
+    """F1 por categoria com barras de erro (bootstrap 95% CI).
+
+    Atende orientacao do orientador: 'em graficos de barra, adicionar
+    barras de erro (95% CI) para provar que os resultados sao
+    estatisticamente superiores e estaveis'. Bootstrap com 10k
+    reamostragens sobre as 30 rodadas de cada cenario/categoria.
+    """
+    from collections import defaultdict as _dd
+
+    agg_by_scen = {a["scenario"]: a for a in summary["aggregated"]}
+    scenarios = ["A", "B", "D", "C"]
+    gt = cov["gt"]
+
+    # Descobre categorias e conta GTs totais por categoria
+    cats = ["SQL_INJECTION", "JWT", "SENSITIVE_DATA_EXPOSURE", "XSS",
+            "BROKEN_ACCESS_CONTROL", "BUSINESS_LOGIC"]
+    cat_short = {"SQL_INJECTION": "SQLi", "JWT": "JWT",
+                 "SENSITIVE_DATA_EXPOSURE": "SDE", "XSS": "XSS",
+                 "BROKEN_ACCESS_CONTROL": "BAC", "BUSINESS_LOGIC": "BLV"}
+
+    # Para bootstrap CI: precisamos F1 POR CATEGORIA POR RODADA, e o
+    # summary agregado nao tem isso desagregado. Uso perCategory dos
+    # relatorios individuais.
+    per_reports = summary.get("perReport", [])
+    f1_por_cat = _dd(lambda: _dd(list))  # scen -> cat -> [f1 por rodada]
+    for r in per_reports:
+        s = r.get("scenario")
+        if s not in scenarios: continue
+        for c in r.get("perCategory", []):
+            cat = c.get("category")
+            if cat not in cats: continue
+            f1_por_cat[s][cat].append(c.get("f1", 0.0))
+
+    def bootstrap_mean_ci(data, n_iter=10000, ci=0.95, seed=42):
+        if not data: return (0.0, 0.0, 0.0)
+        arr = np.array(data)
+        rng = np.random.default_rng(seed)
+        n = len(arr)
+        boots = np.empty(n_iter)
+        for i in range(n_iter):
+            boots[i] = arr[rng.integers(0, n, size=n)].mean()
+        alpha = (1 - ci) / 2
+        return float(arr.mean()), float(np.quantile(boots, alpha)), float(np.quantile(boots, 1 - alpha))
+
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    x = np.arange(len(cats))
+    n_scen = len(scenarios)
+    width = 0.20
+
+    for i, s in enumerate(scenarios):
+        means, lo_err, hi_err = [], [], []
+        for cat in cats:
+            m, lo, hi = bootstrap_mean_ci(f1_por_cat[s].get(cat, []))
+            means.append(m)
+            lo_err.append(m - lo)
+            hi_err.append(hi - m)
+        offset = (i - (n_scen - 1) / 2) * width
+        ax.bar(x + offset, means, width, yerr=[lo_err, hi_err], capsize=3,
+               color=SCEN_COLORS[s], alpha=0.85,
+               label=SCEN_LABELS[s].replace("\n", " "),
+               error_kw={"linewidth": 0.7, "ecolor": "black"})
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([cat_short[c] for c in cats])
+    ax.set_ylabel("F1-score (média com IC 95\\%)")
+    ax.set_ylim(0, 1.0)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    ax.set_axisbelow(True)
+    ax.legend(loc="upper right", frameon=True, framealpha=0.95)
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    fig.savefig(out)
+    plt.close(fig)
 
 
 # ==================================================================
@@ -573,16 +686,20 @@ def main():
     print(f"       -> {OUT / 'tables.tex'}")
 
     print("[gen] boxplot F1 por cenario...")
-    plot_boxplot_f1(summary, OUT / "boxplot-f1.png")
-    print(f"       -> {OUT / 'boxplot-f1.png'}")
+    plot_violin_f1(summary, OUT / "violin-f1.pdf")
+    print(f"       -> {OUT / 'violin-f1.pdf'}")
 
     print("[gen] barras cobertura por cenario e categoria...")
-    plot_barchart_coverage(cov, OUT / "barchart-coverage.png")
-    print(f"       -> {OUT / 'barchart-coverage.png'}")
+    plot_barchart_coverage(cov, OUT / "barchart-coverage.pdf")
+    print(f"       -> {OUT / 'barchart-coverage.pdf'}")
 
     print("[gen] heatmap frequencia de deteccao...")
-    plot_heatmap_detection(cov, OUT / "heatmap-detection.png")
-    print(f"       -> {OUT / 'heatmap-detection.png'}")
+    plot_heatmap_detection(cov, OUT / "heatmap-detection.pdf")
+    print(f"       -> {OUT / 'heatmap-detection.pdf'}")
+
+    print("[gen] F1 por categoria com barras de erro CI 95%...")
+    plot_f1_por_categoria_ci(summary, cov, OUT / "f1-por-categoria-ci.pdf")
+    print(f"       -> {OUT / 'f1-por-categoria-ci.pdf'}")
 
     # NOTA: resumo.md NAO e mais regerado automaticamente. A versao
     # atual em disco foi humanizada manualmente para uso em anexos e

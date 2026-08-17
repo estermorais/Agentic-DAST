@@ -48,6 +48,8 @@ Thumbs.db
 *.snm
 *.vrb
 *.pdf
+# Excecoes: PDFs vetoriais gerados como artefatos do TCC 2 SAO versionados
+!agentic-dast/reports/tcc-artifacts/*.pdf
 
 # Claude Code
 .claude/

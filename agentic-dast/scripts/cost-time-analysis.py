@@ -113,7 +113,7 @@ def main():
     # Estatisticas de tempo
     # =============================================================
     time_stats = {}
-    for scen in ("A", "B", "C", "D"):
+    for scen in ("A", "B", "D", "C"):
         durs = [r["duration_s"] for r in per_scen[scen]]
         time_stats[scen] = stats_summary(durs)
 
@@ -128,7 +128,7 @@ def main():
     # Estatisticas de findings brutos por rodada
     # =============================================================
     findings_stats = {}
-    for scen in ("A", "B", "C", "D"):
+    for scen in ("A", "B", "D", "C"):
         fs = [r["findings"] for r in per_scen[scen]]
         findings_stats[scen] = stats_summary(fs)
 
@@ -154,13 +154,13 @@ def main():
               "de parede entre o disparo do container do agente e a gravação do relatório.\n")
     md.append("| Cenário | n | Média (s) | Mediana (s) | Mín | Máx | Desvio | Total (min) |")
     md.append("|---|---|---|---|---|---|---|---|")
-    for scen in ("A", "B", "C", "D"):
+    for scen in ("A", "B", "D", "C"):
         s = time_stats[scen]
         md.append(f"| {scen} | {s['n']} | {fmt(s['mean'])} | {fmt(s['median'])} | "
                   f"{fmt(s['min'])} | {fmt(s['max'])} | {fmt(s['std'])} | {fmt(s['sum']/60)} |")
     md.append("")
 
-    total_time_min = sum(time_stats[s]["sum"] for s in "ABCD") / 60
+    total_time_min = sum(time_stats[s]["sum"] for s in "ABDC") / 60
     md.append(f"**Tempo total de execução da rodada oficial:** {fmt(total_time_min)} minutos "
               f"({fmt(total_time_min/60, 2)} horas).\n")
 
@@ -232,7 +232,7 @@ def main():
     tex.append(r"\toprule")
     tex.append(r"\textbf{Cenário} & \textbf{$n$} & \textbf{Média} & \textbf{Mediana} & \textbf{Mín} & \textbf{Máx} & \textbf{Desvio} \\")
     tex.append(r"\midrule")
-    for scen in ("A", "B", "C", "D"):
+    for scen in ("A", "B", "D", "C"):
         s = time_stats[scen]
         row = f"{scen} & {s['n']} & {fmt(s['mean'])} & {fmt(s['median'])} & {fmt(s['min'])} & {fmt(s['max'])} & {fmt(s['std'])} \\\\"
         tex.append(row.replace(".", "{,}"))
@@ -255,44 +255,59 @@ def main():
     (OUT / "custo-tempo.tex").write_text("\n".join(tex), encoding="utf-8")
 
     # =============================================================
-    # Grafico: boxplot de duracao
+    # Grafico: violin+swarm de duracao (mesma orientacao dos outros)
     # =============================================================
+    import pandas as pd
+    import seaborn as sns
+
+    sns.set_theme(style="ticks")
     plt.rcParams.update({
-        "font.family": "serif", "font.size": 11,
-        "axes.grid": True, "grid.alpha": 0.3,
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+        "font.size": 10, "axes.labelsize": 10,
+        "xtick.labelsize": 9, "ytick.labelsize": 9,
         "axes.spines.top": False, "axes.spines.right": False,
-        "figure.dpi": 120, "savefig.dpi": 150, "savefig.bbox": "tight",
+        "figure.dpi": 120, "savefig.dpi": 300, "savefig.bbox": "tight",
+        "savefig.format": "pdf",
     })
     scen_colors = {"A": "#0072B2", "B": "#56B4E9", "C": "#009E73", "D": "#D55E00"}
-    scen_labels = {
-        "A": "Cenário A\n(ZAP puro)",
-        "B": "Cenário B\n(ZAP + E2E)",
-        "C": "Cenário C\n(Agentic DAST)",
-        "D": "Cenário D\n(PentestGPT)",
+    scen_labels_short = {
+        "A": "Cenário A (ZAP puro)",
+        "B": "Cenário B (ZAP + E2E)",
+        "D": "Cenário D (PentestGPT)",
+        "C": "Cenário C (Agentic DAST)",
     }
 
-    data = [[r["duration_s"] for r in per_scen[s]] for s in "ABCD"]
-    fig, ax = plt.subplots(figsize=(9, 5))
-    bp = ax.boxplot(data, patch_artist=True, widths=0.5,
-                    medianprops=dict(color="black", linewidth=1.5),
-                    showmeans=True,
-                    meanprops=dict(marker="D", markerfacecolor="white",
-                                   markeredgecolor="black", markersize=7))
-    for patch, s in zip(bp["boxes"], "ABCD"):
-        patch.set_facecolor(scen_colors[s])
-        patch.set_alpha(0.75)
+    rows_plot = []
+    for s in "ABDC":
+        for r in per_scen[s]:
+            rows_plot.append({"Cenário": scen_labels_short[s], "Duração (s)": r["duration_s"]})
+    df_dur = pd.DataFrame(rows_plot)
 
-    ax.set_xticklabels([scen_labels[s] for s in "ABCD"])
-    ax.set_ylabel("Duração por rodada (segundos)", fontsize=12)
-    ax.set_title("Tempo de execução por cenário (n=30 cada)", fontsize=13, pad=15)
+    order = [scen_labels_short[s] for s in "ABDC"]
+    palette = [scen_colors[s] for s in "ABDC"]
 
-    for i, s in enumerate("ABCD", 1):
+    fig, ax = plt.subplots(figsize=(7, 4))
+    sns.violinplot(data=df_dur, x="Cenário", y="Duração (s)",
+                   order=order, hue="Cenário", palette=palette, hue_order=order,
+                   inner="quartile", linewidth=0.8, cut=0, ax=ax, alpha=0.55, legend=False)
+    sns.stripplot(data=df_dur, x="Cenário", y="Duração (s)",
+                  order=order, color="black", alpha=0.5, size=3.0, jitter=0.15, ax=ax)
+
+    for i, s in enumerate("ABDC"):
         m = time_stats[s]["mean"]
-        ax.text(i, m + 15, f"μ={fmt(m, 0)}s", ha="center", fontsize=9, style="italic")
+        ax.scatter(i, m, marker="D", s=45,
+                   facecolor="white", edgecolor="black", linewidth=0.9, zorder=5)
+        ax.text(i, m + 30, f"μ={fmt(m, 0)}s", ha="center", fontsize=8, style="italic")
 
-    plt.tight_layout()
-    plt.savefig(OUT / "duracao-boxplot.png")
-    plt.close()
+    ax.set_ylabel("Duração por rodada (segundos)")
+    ax.set_xlabel("")
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    ax.set_axisbelow(True)
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    fig.savefig(OUT / "duracao-violin.pdf")
+    plt.close(fig)
 
     # =============================================================
     # Print no terminal
@@ -302,7 +317,7 @@ def main():
     print("=" * 60)
     print(f"Tempo total da rodada oficial: {fmt(total_time_min)} min ({fmt(total_time_min/60, 2)}h)")
     print()
-    for s in "ABCD":
+    for s in "ABDC":
         ts = time_stats[s]
         print(f"  {s}: {fmt(ts['mean'])}s +/- {fmt(ts['std'])}s (n={ts['n']})")
     print()
@@ -314,7 +329,7 @@ def main():
     print(f"  Media: {fmt(iter_c['mean'])} +/- {fmt(iter_c['std'])}")
     print(f"  Bateu o teto de 40: {sum(1 for x in c_iters if x >= 40)}/{len(c_iters)}")
     print()
-    print(f"[gen] custo-tempo.md, custo-tempo.tex e duracao-boxplot.png em {OUT}/")
+    print(f"[gen] custo-tempo.md, custo-tempo.tex e duracao-violin.pdf em {OUT}/")
 
 
 if __name__ == "__main__":
