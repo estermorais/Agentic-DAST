@@ -68,7 +68,9 @@ class DOMExtractor {
             console.log(`[Percepção] Usando proxy ZAP em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort} (navegação via ${config_1.config.browserBaseUrl})`);
         }
         this.browser = await puppeteer_1.default.launch({
-            headless: true, // true = sem janela, false = útil para depuração
+            // Se INTERACTIVE_LOGIN=true, abre janela visivel para o
+            // operador fazer login manual (MFA/SSO/CAPTCHA).
+            headless: !config_1.config.interactiveLogin,
             args,
         });
         console.log('[Percepção] Browser iniciado.');
@@ -421,13 +423,17 @@ class DOMExtractor {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
     /**
-     * Se MANUAL_JWT ou MANUAL_COOKIES estao presentes, monta o
-     * AuthContext direto a partir dessas env vars e injeta os cookies
-     * no browser Puppeteer antes das navegacoes. Retorna null se
-     * nenhuma variavel manual esta preenchida (caso em que o fluxo
-     * de login automatico segue normalmente).
+     * Tres caminhos de sessao manual, em ordem de prioridade:
+     *   1. INTERACTIVE_LOGIN=true: abre browser visivel, aguarda operador
+     *      logar (MFA/SSO), captura cookies + localStorage['token'|'jwt'].
+     *   2. MANUAL_JWT e/ou MANUAL_COOKIES preenchidos: monta AuthContext
+     *      diretamente e injeta cookies no Puppeteer.
+     *   3. Nenhuma das acima: retorna null (login automatico assume).
      */
     async applyManualSessionIfProvided() {
+        if (config_1.config.interactiveLogin) {
+            return await this.captureSessionAfterManualLogin();
+        }
         const hasJwt = !!config_1.config.manualJwt;
         const hasCookies = !!config_1.config.manualCookies;
         if (!hasJwt && !hasCookies)
@@ -458,6 +464,77 @@ class DOMExtractor {
             }
         }
         return auth;
+    }
+    /**
+     * Fluxo INTERACTIVE_LOGIN: abre uma pagina do CRM no Chromium
+     * VISIVEL, aguarda o operador logar manualmente (passando MFA,
+     * SSO, CAPTCHA etc.), pergunta no terminal quando terminou e
+     * captura a sessao resultante (cookies + token comum de
+     * localStorage). A partir daqui o resto da rodada continua
+     * automatico com essa sessao.
+     */
+    async captureSessionAfterManualLogin() {
+        if (!this.browser)
+            throw new Error('browser nao inicializado');
+        const page = await this.browser.newPage();
+        console.log('');
+        console.log('━'.repeat(72));
+        console.log('  MODO INTERATIVO — LOGIN MANUAL');
+        console.log('━'.repeat(72));
+        console.log(`  Abrindo ${config_1.config.browserBaseUrl} no browser visivel.`);
+        console.log('  Faca login normalmente (senha + MFA + SSO conforme');
+        console.log('  aplicavel). Quando estiver DENTRO da aplicacao');
+        console.log('  autenticada, volte ao terminal e pressione ENTER.');
+        console.log('━'.repeat(72));
+        console.log('');
+        try {
+            await page.goto(config_1.config.browserBaseUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+        }
+        catch (err) {
+            console.warn(`[Percepcao] Aviso ao carregar pagina de login: ${err.message}`);
+        }
+        await this.waitForEnter('  Pressione ENTER apos concluir o login > ');
+        // Captura cookies do dominio inteiro (nao apenas da URL atual)
+        const targetHost = new URL(config_1.config.browserBaseUrl).hostname;
+        const puppeteerCookies = await page.cookies();
+        const cookiesForHost = puppeteerCookies.filter((c) => c.domain.replace(/^\./, '') === targetHost
+            || targetHost.endsWith(c.domain.replace(/^\./, '')));
+        const cookieDict = {};
+        for (const c of cookiesForHost)
+            cookieDict[c.name] = c.value;
+        // Tenta detectar JWT em chaves comuns de localStorage
+        const jwtFromStorage = await page.evaluate(() => {
+            const candidates = ['token', 'jwt', 'accessToken', 'access_token',
+                'authToken', 'auth_token', 'idToken', 'id_token'];
+            for (const key of candidates) {
+                const v = localStorage.getItem(key) || sessionStorage.getItem(key);
+                if (v && v.length > 20)
+                    return { key, value: v };
+            }
+            return null;
+        }).catch(() => null);
+        await page.close();
+        const jwt = jwtFromStorage?.value;
+        console.log('');
+        console.log('[Percepcao] Sessao capturada:');
+        console.log(`  Cookies coletados : ${Object.keys(cookieDict).length}`);
+        console.log(`  JWT detectado     : ${jwt ? `sim (${jwtFromStorage.key} do storage)` : 'nao'}`);
+        console.log('');
+        return {
+            jwt,
+            bearerToken: jwt,
+            cookies: cookieDict,
+            userEmail: '(login interativo)',
+        };
+    }
+    /** Pausa a execucao ate o operador pressionar ENTER no terminal. */
+    waitForEnter(prompt) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const readline = require('readline');
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        return new Promise((resolve) => {
+            rl.question(prompt, () => { rl.close(); resolve(); });
+        });
     }
 }
 exports.DOMExtractor = DOMExtractor;

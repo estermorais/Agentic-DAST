@@ -182,20 +182,78 @@ credenciais e rotas hardcoded do OWASP Juice Shop. Em qualquer alvo
 real com MFA ou SSO, isso **não funciona** — Puppeteer não consegue
 passar o segundo fator sozinho.
 
-**Solução**: forneça a sessão manualmente via variáveis de ambiente.
-O framework aceita **JWT (Bearer token)** e/ou **cookies de sessão**
-— use o que o seu CRM utilizar. Quando qualquer uma das duas está
-preenchida, o framework:
+**Solução**: três alternativas, escolha a mais prática pro seu contexto.
+Todas resultam na mesma coisa (sessão autenticada disponível no
+`AppMap.auth`); a diferença é como você fornece as credenciais.
 
-- Pula o fluxo de login automático
-- Injeta os cookies no Puppeteer antes da Fase 1 (Percepção autenticada)
+- **Login interativo** (`INTERACTIVE_LOGIN=true`) — o framework abre
+  o browser visível, você faz login manualmente uma vez, ele captura
+  a sessão. Recomendado quando é mais prático logar do que copiar
+  tokens. **Requer display no laptop** (não funciona em servidor
+  headless).
+- **JWT manual** (`MANUAL_JWT=...`) — você cola o Bearer token
+  copiado do DevTools. Bom pra scripts automatizados e para servidor
+  headless.
+- **Cookies manuais** (`MANUAL_COOKIES=...`) — você cola os cookies
+  de sessão copiados do DevTools. Idem.
+
+Prioridade se mais de uma estiver preenchida: `INTERACTIVE_LOGIN`
+vence `MANUAL_JWT`/`MANUAL_COOKIES`.
+
+Em qualquer dos três, o framework:
+- Pula o fluxo de login automático hardcoded do Juice Shop
+- Injeta os cookies no Puppeteer antes da Fase 1 (Percepção
+  autenticada)
 - Injeta JWT e Cookie como headers default no HttpClient (todas as
   requests do agente saem já autenticadas)
 
-### Opção 1 — JWT (Bearer token)
+### Opção 1 — Login interativo (recomendado)
 
-Usar quando o CRM autentica via header `Authorization: Bearer <token>`
-(padrão em SPAs modernas e APIs REST).
+Usar quando você prefere logar no browser em vez de copiar tokens.
+Contorna MFA/SSO/CAPTCHA naturalmente porque quem faz o login é
+você.
+
+**Como usar:**
+
+```env
+INTERACTIVE_LOGIN=true
+```
+
+Ou em PowerShell antes de rodar:
+
+```powershell
+$env:INTERACTIVE_LOGIN = "true"
+```
+
+Ao iniciar `npm run start:production`, o framework vai:
+
+1. Abrir uma janela do Chromium visível na URL do `TARGET_URL`
+2. Mostrar no terminal a mensagem:
+   ```
+   MODO INTERATIVO — LOGIN MANUAL
+   Abrindo <URL> no browser visivel.
+   Faca login normalmente (senha + MFA + SSO conforme aplicavel).
+   Quando estiver DENTRO da aplicacao autenticada, volte ao
+   terminal e pressione ENTER.
+   ```
+3. Aguardar você fazer o login manualmente na janela
+4. Após você pressionar ENTER no terminal, capturar automaticamente:
+   - Todos os cookies do domínio do alvo
+   - JWT do `localStorage`/`sessionStorage` (tenta `token`, `jwt`,
+     `accessToken`, `access_token`, `authToken`, `auth_token`,
+     `idToken`, `id_token`)
+5. Fechar a janela e continuar a rodada normalmente com a sessão
+   capturada
+
+**Requisitos:**
+- Máquina com display (não funciona em servidor headless / SSH sem
+  X forwarding)
+- Você fica no laptop até apertar o ENTER (depois pode sair)
+
+### Opção 2 — JWT (Bearer token)
+
+Usar quando você prefere colar o token manualmente, ou quando roda
+em servidor headless. Padrão em SPAs modernas e APIs REST.
 
 **Como obter:**
 1. Faça login no CRM pelo seu Chrome normalmente (senha + MFA)
@@ -209,7 +267,7 @@ Usar quando o CRM autentica via header `Authorization: Bearer <token>`
 MANUAL_JWT=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-### Opção 2 — Cookies de sessão
+### Opção 3 — Cookies de sessão
 
 Usar quando o CRM autentica via cookies HTTP (comum em apps
 tradicionais com `SESSIONID`, `PHPSESSID`, `connect.sid`, etc.).
@@ -233,7 +291,7 @@ Em PowerShell (aspas duplas na string toda):
 $env:MANUAL_COOKIES = "SESSIONID=abc123; XSRF-TOKEN=def456; tenant=acme"
 ```
 
-### Opção 3 — Ambos ao mesmo tempo
+### Opção 4 — JWT + Cookies combinados
 
 Se o CRM usa cookies **e** header (comum em APIs com CSRF token no
 cookie e Bearer no header), passa as duas variáveis. O framework usa

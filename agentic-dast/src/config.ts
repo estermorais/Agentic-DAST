@@ -75,6 +75,14 @@ export const config = {
   manualJwt: optional('MANUAL_JWT', ''),
   manualCookies: optional('MANUAL_COOKIES', ''),
 
+  // INTERACTIVE_LOGIN: se 'true', o DOMExtractor abre o Chromium
+  // visivel (headless=false), aguarda o operador logar manualmente
+  // (senha + MFA + SSO como fizer no browser normal) e captura a
+  // sessao resultante (cookies + JWT do localStorage) apos ENTER
+  // no terminal. Alternativa ao MANUAL_JWT/MANUAL_COOKIES quando
+  // e mais pratico logar interativamente do que colar tokens.
+  interactiveLogin: optional('INTERACTIVE_LOGIN', 'false').toLowerCase() === 'true',
+
   // ── Alvo ───────────────────────────────────────────────────
   // URL do alvo do ponto de vista do HOST (axios direto, relatório)
   targetUrl: _targetUrl,
