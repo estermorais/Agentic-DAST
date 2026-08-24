@@ -289,8 +289,9 @@ class ClaudeCliClient {
         const fullPrompt = parts.join('\n');
         // Invoca o CLI. Requer `claude` no PATH e login OAuth previo.
         const { spawn } = await Promise.resolve().then(() => __importStar(require('child_process')));
+        const cliArgs = ['-p', '--model', this.model, '--output-format', 'text'];
         return new Promise((resolve, reject) => {
-            const proc = spawn('claude', ['-p', '--model', this.model, '--output-format', 'text'], { stdio: ['pipe', 'pipe', 'pipe'] });
+            const proc = spawn('claude', cliArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
             let stdout = '';
             let stderr = '';
             proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
@@ -302,7 +303,26 @@ class ClaudeCliClient {
             });
             proc.on('close', (code) => {
                 if (code !== 0) {
-                    reject(new Error(`Claude Code CLI encerrou com codigo ${code}. stderr: ${stderr.substring(0, 500)}`));
+                    // Muitas versoes do CLI escrevem erros no stdout (nao stderr)
+                    // e as vezes ambos ficam vazios (erro apenas via exit code).
+                    // Mostramos tudo que temos + o comando executado, para o
+                    // operador conseguir reproduzir e diagnosticar manualmente.
+                    const cmdShown = `claude ${cliArgs.join(' ')}`;
+                    const detailParts = [];
+                    if (stderr.trim())
+                        detailParts.push(`stderr:\n${stderr.substring(0, 800)}`);
+                    if (stdout.trim())
+                        detailParts.push(`stdout:\n${stdout.substring(0, 800)}`);
+                    if (!detailParts.length)
+                        detailParts.push('(nenhuma saida em stdout nem stderr — provavelmente CLI nao logado, ' +
+                            'quota Pro esgotada, ou flag/modelo invalido)');
+                    reject(new Error(`Claude Code CLI encerrou com codigo ${code}.\n` +
+                        `Comando: ${cmdShown}\n` +
+                        detailParts.join('\n\n') + '\n\n' +
+                        `Reproduza manualmente:\n` +
+                        `  echo "teste" | ${cmdShown}\n` +
+                        `Se nao funcionar, tente ` +
+                        `'claude login' e 'claude --version' para diagnosticar.`));
                     return;
                 }
                 resolve(stdout.trim());
