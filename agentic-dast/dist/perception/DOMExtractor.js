@@ -84,6 +84,12 @@ class DOMExtractor {
     async extract() {
         if (!this.browser)
             throw new Error('Chame launch() antes de extract().');
+        // Se o operador forneceu sessao manual (JWT/cookies) via env vars,
+        // injeta os cookies no browser ANTES das navegacoes. Sem isso, a
+        // Fase 1 rodaria como anonima e nao enxergaria a superficie
+        // autenticada do alvo. Usado para alvos com MFA/SSO/CAPTCHA que
+        // impedem login automatizado.
+        const manualAuth = await this.applyManualSessionIfProvided();
         const routes = [];
         for (const routePath of JUICE_SHOP_ROUTES) {
             const url = `${config_1.config.browserBaseUrl}${routePath}`;
@@ -105,22 +111,10 @@ class DOMExtractor {
                 await page.close();
             }
         }
-        // Coleta tokens. Se MANUAL_JWT esta preenchido (uso em alvos com
-        // MFA/SSO/CAPTCHA que o Puppeteer nao consegue passar sozinho),
-        // pula o fluxo de login automatico e usa o JWT fornecido.
-        let auth;
-        if (config_1.config.manualJwt) {
-            console.log('[Percepcao] MANUAL_JWT presente. Pulando login automatico.');
-            auth = {
-                jwt: config_1.config.manualJwt,
-                bearerToken: config_1.config.manualJwt,
-                cookies: {},
-                userEmail: '(manual JWT fornecido via MANUAL_JWT env var)',
-            };
-        }
-        else {
-            auth = await this.collectAuthTokens();
-        }
+        // Coleta tokens. Se sessao manual ja foi aplicada acima, reusa;
+        // caso contrario, tenta o login automatico com credenciais default
+        // (funciona apenas contra Juice Shop).
+        const auth = manualAuth ?? await this.collectAuthTokens();
         // Coleta endpoints autenticados (repete algumas rotas logado)
         const authEndpoints = await this.collectAuthenticatedEndpoints(auth);
         const allEndpoints = this.deduplicateEndpoints([
@@ -426,6 +420,68 @@ class DOMExtractor {
     sleep(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
+    /**
+     * Se MANUAL_JWT ou MANUAL_COOKIES estao presentes, monta o
+     * AuthContext direto a partir dessas env vars e injeta os cookies
+     * no browser Puppeteer antes das navegacoes. Retorna null se
+     * nenhuma variavel manual esta preenchida (caso em que o fluxo
+     * de login automatico segue normalmente).
+     */
+    async applyManualSessionIfProvided() {
+        const hasJwt = !!config_1.config.manualJwt;
+        const hasCookies = !!config_1.config.manualCookies;
+        if (!hasJwt && !hasCookies)
+            return null;
+        const flags = [
+            hasJwt ? 'MANUAL_JWT' : null,
+            hasCookies ? 'MANUAL_COOKIES' : null,
+        ].filter(Boolean).join(' + ');
+        console.log(`[Percepcao] ${flags} presente(s). Pulando login automatico.`);
+        const cookieDict = parseCookieString(config_1.config.manualCookies);
+        const auth = {
+            jwt: config_1.config.manualJwt || undefined,
+            bearerToken: config_1.config.manualJwt || undefined,
+            cookies: cookieDict,
+            userEmail: '(sessao manual fornecida via env vars)',
+        };
+        if (hasCookies && Object.keys(cookieDict).length > 0 && this.browser) {
+            const targetHost = new URL(config_1.config.browserBaseUrl).hostname;
+            const tmpPage = await this.browser.newPage();
+            try {
+                await tmpPage.setCookie(...Object.entries(cookieDict).map(([name, value]) => ({
+                    name, value, domain: targetHost, path: '/',
+                })));
+                console.log(`[Percepcao] ${Object.keys(cookieDict).length} cookie(s) injetado(s) no Puppeteer.`);
+            }
+            finally {
+                await tmpPage.close();
+            }
+        }
+        return auth;
+    }
 }
 exports.DOMExtractor = DOMExtractor;
+/**
+ * Parseia uma string de cookies no formato do header HTTP
+ * ('nome1=valor1; nome2=valor2') em um dicionario. Aceita valores
+ * com '=' internos (ex: JWT em base64). Ignora entradas malformadas.
+ */
+function parseCookieString(raw) {
+    const dict = {};
+    if (!raw)
+        return dict;
+    for (const chunk of raw.split(';')) {
+        const trimmed = chunk.trim();
+        if (!trimmed)
+            continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx < 1)
+            continue;
+        const name = trimmed.substring(0, eqIdx).trim();
+        const value = trimmed.substring(eqIdx + 1).trim();
+        if (name)
+            dict[name] = value;
+    }
+    return dict;
+}
 //# sourceMappingURL=DOMExtractor.js.map

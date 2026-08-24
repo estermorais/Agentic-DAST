@@ -182,55 +182,88 @@ credenciais e rotas hardcoded do OWASP Juice Shop. Em qualquer alvo
 real com MFA ou SSO, isso **não funciona** — Puppeteer não consegue
 passar o segundo fator sozinho.
 
-**Solução**: forneça o JWT manualmente via variável de ambiente
-`MANUAL_JWT`. O framework detecta a presença dessa variável, pula
-todo o fluxo de login automático e usa o JWT fornecido como identidade
-autenticada para o resto da rodada.
+**Solução**: forneça a sessão manualmente via variáveis de ambiente.
+O framework aceita **JWT (Bearer token)** e/ou **cookies de sessão**
+— use o que o seu CRM utilizar. Quando qualquer uma das duas está
+preenchida, o framework:
 
-### Como obter o JWT do CRM
+- Pula o fluxo de login automático
+- Injeta os cookies no Puppeteer antes da Fase 1 (Percepção autenticada)
+- Injeta JWT e Cookie como headers default no HttpClient (todas as
+  requests do agente saem já autenticadas)
 
+### Opção 1 — JWT (Bearer token)
+
+Usar quando o CRM autentica via header `Authorization: Bearer <token>`
+(padrão em SPAs modernas e APIs REST).
+
+**Como obter:**
 1. Faça login no CRM pelo seu Chrome normalmente (senha + MFA)
-2. Depois de autenticada, abra **DevTools → aba Network**
-3. Faça qualquer ação que gere uma request autenticada (recarregar
-   uma tela, clicar em um menu)
-4. Clique numa das requests → aba **Headers** → procure o header
-   `Authorization: Bearer <token>`
+2. Abra **DevTools → aba Network**
+3. Faça qualquer ação autenticada (recarregar tela, clicar em menu)
+4. Clique numa das requests → aba **Headers** → procure `Authorization: Bearer <token>`
 5. Copie **só a parte do token** (o texto depois de `Bearer `)
 
-### Como passar pro framework
-
-Adicione ao `.env` ou passe como env var da sessão:
-
+**Como passar:**
 ```env
 MANUAL_JWT=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-Ou em PowerShell antes de rodar:
+### Opção 2 — Cookies de sessão
 
+Usar quando o CRM autentica via cookies HTTP (comum em apps
+tradicionais com `SESSIONID`, `PHPSESSID`, `connect.sid`, etc.).
+
+**Como obter:**
+1. Faça login no CRM pelo seu Chrome normalmente (senha + MFA)
+2. Abra **DevTools → aba Application → Cookies → domínio do CRM**
+3. Você vai ver uma tabela com Name / Value para cada cookie
+4. Monte uma string no formato do header HTTP:
+   `nome1=valor1; nome2=valor2; nome3=valor3`
+5. Inclua **todos** os cookies do CRM (session, csrf, tenant id, etc.) —
+   se em dúvida, cole todos, o servidor ignora os desnecessários
+
+**Como passar:**
+```env
+MANUAL_COOKIES=SESSIONID=abc123; XSRF-TOKEN=def456; tenant=acme
+```
+
+Em PowerShell (aspas duplas na string toda):
 ```powershell
-$env:MANUAL_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+$env:MANUAL_COOKIES = "SESSIONID=abc123; XSRF-TOKEN=def456; tenant=acme"
+```
+
+### Opção 3 — Ambos ao mesmo tempo
+
+Se o CRM usa cookies **e** header (comum em APIs com CSRF token no
+cookie e Bearer no header), passa as duas variáveis. O framework usa
+as duas.
+
+```env
+MANUAL_JWT=eyJhbGciOi...
+MANUAL_COOKIES=XSRF-TOKEN=def456; tenant=acme
 ```
 
 ### Ressalvas importantes
 
-- **Expiração**: JWTs corporativos duram tipicamente de 15 minutos a
-  algumas horas. Se a rodada for longa, o token pode expirar no meio
-  e todas as requests seguintes retornarão `401`. Se acontecer, o
-  framework não relogado sozinho; encerra a sessão sem detectar as
-  vulnerabilidades autenticadas. **Mitigação**: obter novo token
+- **Expiração**: JWTs e cookies de sessão corporativos duram tipicamente
+  de 15 minutos a algumas horas. Se a rodada for longa, o token/cookie
+  pode expirar no meio e todas as requests seguintes retornarão `401`.
+  O framework não faz relogin sozinho; encerra a sessão sem detectar
+  as vulnerabilidades autenticadas. **Mitigação**: obter nova sessão
   imediatamente antes de iniciar cada rodada e usar
   `MAX_REACT_ITERATIONS` reduzido (10-15) pra caber dentro da janela.
-- **Escopo do token**: o agente vai operar com as **permissões do
-  usuário que gerou o token**. Se você quer testar vulnerabilidades
-  de administrador, precisa gerar o JWT com uma conta admin. Se quer
+- **Escopo da sessão**: o agente vai operar com as **permissões do
+  usuário que gerou o token/cookie**. Se você quer testar vulnerabilidades
+  de administrador, precisa gerar a sessão com uma conta admin. Se quer
   testar como usuário comum, use uma conta comum.
-- **Dados do JWT vão pro LLM**: o token e as respostas autenticadas
-  passam pelo prompt do LLM (Anthropic, EUA se estiver usando
-  `openrouter`/`anthropic`/`claude-cli`). Considere isso na análise
-  de LGPD/confidencialidade.
-- **JWT no `.env`**: se colocar no arquivo, adicione o `.env` ao
+- **Dados da sessão vão pro LLM**: token, cookies e as respostas
+  autenticadas passam pelo prompt do LLM (Anthropic, EUA se estiver
+  usando `openrouter`/`anthropic`/`claude-cli`). Considere isso na
+  análise de LGPD/confidencialidade.
+- **Sessão no `.env`**: se colocar no arquivo, adicione o `.env` ao
   `.gitignore` (já está por padrão neste projeto) e apague depois
-  da rodada. **Nunca comite JWT.**
+  da rodada. **Nunca comite JWT ou cookies de sessão.**
 
 ---
 

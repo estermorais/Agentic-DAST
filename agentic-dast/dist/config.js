@@ -84,13 +84,21 @@ exports.config = {
     ollamaUrl: optional('OLLAMA_URL', 'http://localhost:11434'),
     ollamaModel: optional('OLLAMA_MODEL', 'qwen2.5:7b'),
     // ── Autenticacao manual (para alvos com MFA ou SSO) ────────
-    // Se preenchida, o DOMExtractor pula o fluxo de login automatico e
-    // usa este JWT como AppMap.auth.jwt. Usado quando o alvo exige
-    // MFA/SSO/CAPTCHA que Puppeteer nao consegue passar sozinho.
-    // Obter no browser: DevTools -> Network -> qualquer request
-    // autenticada -> copiar o valor do header Authorization (sem
-    // o prefixo 'Bearer ').
+    // Se qualquer uma destas variaveis estiver preenchida, o
+    // DOMExtractor pula o fluxo de login automatico e usa os valores
+    // fornecidos. Usado quando o alvo exige MFA/SSO/CAPTCHA que
+    // Puppeteer nao consegue passar sozinho.
+    //
+    // MANUAL_JWT: valor do header Authorization (sem 'Bearer ').
+    //   Obter em: DevTools -> Network -> request autenticada -> Headers.
+    //
+    // MANUAL_COOKIES: string no formato 'nome1=valor1; nome2=valor2'
+    //   (mesmo formato do header Cookie que o browser envia).
+    //   Obter em: DevTools -> Application -> Cookies -> copiar tudo.
+    //   Injetado no Puppeteer (para navegacoes) e no HttpClient (para
+    //   requests programaticas do agente).
     manualJwt: optional('MANUAL_JWT', ''),
+    manualCookies: optional('MANUAL_COOKIES', ''),
     // ── Alvo ───────────────────────────────────────────────────
     // URL do alvo do ponto de vista do HOST (axios direto, relatório)
     targetUrl: _targetUrl,

@@ -103,6 +103,28 @@ class ActionDispatcher {
     getFindings() {
         return [...this.findings];
     }
+    /**
+     * Injeta credenciais do AppMap (JWT e/ou cookies coletados na
+     * Fase 1 de Percepcao) como headers default do HttpClient. Sem
+     * isso, cada make_request emitido pelo LLM sairia sem sessao,
+     * mesmo que o AppMap.auth tivesse token/cookie disponivel.
+     *
+     * Deve ser chamado uma vez pelo entrypoint (index.ts ou
+     * production-runner.ts) logo apos criar o ActionDispatcher.
+     */
+    applyAuthContext(auth) {
+        const http = this.actor.getHttpClient();
+        const token = auth.bearerToken ?? auth.jwt;
+        if (token) {
+            http.setDefaultHeader('Authorization', `Bearer ${token}`);
+        }
+        if (auth.cookies && Object.keys(auth.cookies).length > 0) {
+            const cookieString = Object.entries(auth.cookies)
+                .map(([k, v]) => `${k}=${v}`)
+                .join('; ');
+            http.setDefaultHeader('Cookie', cookieString);
+        }
+    }
     /** Encerra o Actor (fecha o browser) */
     async teardown() {
         await this.actor.teardown();

@@ -76,6 +76,7 @@ async function main() {
         // ── Fase 2: Inicialização do Executor ──────────────────
         console.log('[ FASE 2 ] Executor — iniciando Actor...\n');
         dispatcher = await ActionDispatcher_1.ActionDispatcher.create();
+        dispatcher.applyAuthContext(appMap.auth);
         // ── Fase 3: Cognição (loop ReAct) ──────────────────────
         console.log('[ FASE 3 ] Cognição — executando loop ReAct...\n');
         const agent = new ReActAgent_1.ReActAgent(dispatcher);

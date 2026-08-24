@@ -122,6 +122,7 @@ async function main() {
         // Fase 2: Inicialização com envelope SafeDispatcher
         console.log('[ FASE 2 ] Executor — iniciando Actor com camada de guardas...\n');
         dispatcher = await ActionDispatcher_1.ActionDispatcher.create();
+        dispatcher.applyAuthContext(appMap.auth);
         safeDispatcher = new SafeDispatcher_1.SafeDispatcher(dispatcher, {
             readOnly,
             interactive,

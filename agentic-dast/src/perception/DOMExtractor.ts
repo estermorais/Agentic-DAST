@@ -92,6 +92,13 @@ export class DOMExtractor {
   async extract(): Promise<AppMap> {
     if (!this.browser) throw new Error('Chame launch() antes de extract().');
 
+    // Se o operador forneceu sessao manual (JWT/cookies) via env vars,
+    // injeta os cookies no browser ANTES das navegacoes. Sem isso, a
+    // Fase 1 rodaria como anonima e nao enxergaria a superficie
+    // autenticada do alvo. Usado para alvos com MFA/SSO/CAPTCHA que
+    // impedem login automatizado.
+    const manualAuth = await this.applyManualSessionIfProvided();
+
     const routes: AppRoute[] = [];
 
     for (const routePath of JUICE_SHOP_ROUTES) {
@@ -117,21 +124,10 @@ export class DOMExtractor {
       }
     }
 
-    // Coleta tokens. Se MANUAL_JWT esta preenchido (uso em alvos com
-    // MFA/SSO/CAPTCHA que o Puppeteer nao consegue passar sozinho),
-    // pula o fluxo de login automatico e usa o JWT fornecido.
-    let auth: AuthContext;
-    if (config.manualJwt) {
-      console.log('[Percepcao] MANUAL_JWT presente. Pulando login automatico.');
-      auth = {
-        jwt: config.manualJwt,
-        bearerToken: config.manualJwt,
-        cookies: {},
-        userEmail: '(manual JWT fornecido via MANUAL_JWT env var)',
-      };
-    } else {
-      auth = await this.collectAuthTokens();
-    }
+    // Coleta tokens. Se sessao manual ja foi aplicada acima, reusa;
+    // caso contrario, tenta o login automatico com credenciais default
+    // (funciona apenas contra Juice Shop).
+    const auth: AuthContext = manualAuth ?? await this.collectAuthTokens();
 
     // Coleta endpoints autenticados (repete algumas rotas logado)
     const authEndpoints = await this.collectAuthenticatedEndpoints(auth);
@@ -484,4 +480,70 @@ export class DOMExtractor {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  /**
+   * Se MANUAL_JWT ou MANUAL_COOKIES estao presentes, monta o
+   * AuthContext direto a partir dessas env vars e injeta os cookies
+   * no browser Puppeteer antes das navegacoes. Retorna null se
+   * nenhuma variavel manual esta preenchida (caso em que o fluxo
+   * de login automatico segue normalmente).
+   */
+  private async applyManualSessionIfProvided(): Promise<AuthContext | null> {
+    const hasJwt     = !!config.manualJwt;
+    const hasCookies = !!config.manualCookies;
+    if (!hasJwt && !hasCookies) return null;
+
+    const flags = [
+      hasJwt     ? 'MANUAL_JWT'     : null,
+      hasCookies ? 'MANUAL_COOKIES' : null,
+    ].filter(Boolean).join(' + ');
+    console.log(`[Percepcao] ${flags} presente(s). Pulando login automatico.`);
+
+    const cookieDict = parseCookieString(config.manualCookies);
+    const auth: AuthContext = {
+      jwt:         config.manualJwt || undefined,
+      bearerToken: config.manualJwt || undefined,
+      cookies:     cookieDict,
+      userEmail:   '(sessao manual fornecida via env vars)',
+    };
+
+    if (hasCookies && Object.keys(cookieDict).length > 0 && this.browser) {
+      const targetHost = new URL(config.browserBaseUrl).hostname;
+      const tmpPage = await this.browser.newPage();
+      try {
+        await tmpPage.setCookie(
+          ...Object.entries(cookieDict).map(([name, value]) => ({
+            name, value, domain: targetHost, path: '/',
+          })),
+        );
+        console.log(
+          `[Percepcao] ${Object.keys(cookieDict).length} cookie(s) injetado(s) no Puppeteer.`,
+        );
+      } finally {
+        await tmpPage.close();
+      }
+    }
+
+    return auth;
+  }
+}
+
+/**
+ * Parseia uma string de cookies no formato do header HTTP
+ * ('nome1=valor1; nome2=valor2') em um dicionario. Aceita valores
+ * com '=' internos (ex: JWT em base64). Ignora entradas malformadas.
+ */
+function parseCookieString(raw: string): Record<string, string> {
+  const dict: Record<string, string> = {};
+  if (!raw) return dict;
+  for (const chunk of raw.split(';')) {
+    const trimmed = chunk.trim();
+    if (!trimmed) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx < 1) continue;
+    const name  = trimmed.substring(0, eqIdx).trim();
+    const value = trimmed.substring(eqIdx + 1).trim();
+    if (name) dict[name] = value;
+  }
+  return dict;
 }
