@@ -175,6 +175,65 @@ compartilhado como despesa de projeto de segurança.
 
 ---
 
+## Autenticação em alvos com MFA / SSO / CAPTCHA
+
+O `DOMExtractor` (Fase 1) tentaria fazer login automatizado usando
+credenciais e rotas hardcoded do OWASP Juice Shop. Em qualquer alvo
+real com MFA ou SSO, isso **não funciona** — Puppeteer não consegue
+passar o segundo fator sozinho.
+
+**Solução**: forneça o JWT manualmente via variável de ambiente
+`MANUAL_JWT`. O framework detecta a presença dessa variável, pula
+todo o fluxo de login automático e usa o JWT fornecido como identidade
+autenticada para o resto da rodada.
+
+### Como obter o JWT do CRM
+
+1. Faça login no CRM pelo seu Chrome normalmente (senha + MFA)
+2. Depois de autenticada, abra **DevTools → aba Network**
+3. Faça qualquer ação que gere uma request autenticada (recarregar
+   uma tela, clicar em um menu)
+4. Clique numa das requests → aba **Headers** → procure o header
+   `Authorization: Bearer <token>`
+5. Copie **só a parte do token** (o texto depois de `Bearer `)
+
+### Como passar pro framework
+
+Adicione ao `.env` ou passe como env var da sessão:
+
+```env
+MANUAL_JWT=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+Ou em PowerShell antes de rodar:
+
+```powershell
+$env:MANUAL_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+### Ressalvas importantes
+
+- **Expiração**: JWTs corporativos duram tipicamente de 15 minutos a
+  algumas horas. Se a rodada for longa, o token pode expirar no meio
+  e todas as requests seguintes retornarão `401`. Se acontecer, o
+  framework não relogado sozinho; encerra a sessão sem detectar as
+  vulnerabilidades autenticadas. **Mitigação**: obter novo token
+  imediatamente antes de iniciar cada rodada e usar
+  `MAX_REACT_ITERATIONS` reduzido (10-15) pra caber dentro da janela.
+- **Escopo do token**: o agente vai operar com as **permissões do
+  usuário que gerou o token**. Se você quer testar vulnerabilidades
+  de administrador, precisa gerar o JWT com uma conta admin. Se quer
+  testar como usuário comum, use uma conta comum.
+- **Dados do JWT vão pro LLM**: o token e as respostas autenticadas
+  passam pelo prompt do LLM (Anthropic, EUA se estiver usando
+  `openrouter`/`anthropic`/`claude-cli`). Considere isso na análise
+  de LGPD/confidencialidade.
+- **JWT no `.env`**: se colocar no arquivo, adicione o `.env` ao
+  `.gitignore` (já está por padrão neste projeto) e apague depois
+  da rodada. **Nunca comite JWT.**
+
+---
+
 ## Limitações que o red team precisa conhecer
 
 Cinco pontos que o módulo `production-mode` NÃO resolve:

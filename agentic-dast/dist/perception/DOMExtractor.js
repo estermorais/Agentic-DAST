@@ -105,8 +105,22 @@ class DOMExtractor {
                 await page.close();
             }
         }
-        // Coleta tokens fazendo login com conta de teste
-        const auth = await this.collectAuthTokens();
+        // Coleta tokens. Se MANUAL_JWT esta preenchido (uso em alvos com
+        // MFA/SSO/CAPTCHA que o Puppeteer nao consegue passar sozinho),
+        // pula o fluxo de login automatico e usa o JWT fornecido.
+        let auth;
+        if (config_1.config.manualJwt) {
+            console.log('[Percepcao] MANUAL_JWT presente. Pulando login automatico.');
+            auth = {
+                jwt: config_1.config.manualJwt,
+                bearerToken: config_1.config.manualJwt,
+                cookies: {},
+                userEmail: '(manual JWT fornecido via MANUAL_JWT env var)',
+            };
+        }
+        else {
+            auth = await this.collectAuthTokens();
+        }
         // Coleta endpoints autenticados (repete algumas rotas logado)
         const authEndpoints = await this.collectAuthenticatedEndpoints(auth);
         const allEndpoints = this.deduplicateEndpoints([
