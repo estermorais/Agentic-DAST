@@ -261,13 +261,16 @@ Ao iniciar `npm run start:production`, o framework vai:
    - JWT do `localStorage`/`sessionStorage` (tenta `token`, `jwt`,
      `accessToken`, `access_token`, `authToken`, `auth_token`,
      `idToken`, `id_token`)
-5. Fechar a janela e continuar a rodada normalmente com a sessão
-   capturada
+5. **Fechar a janela visível** e reabrir o browser em modo headless
+   (invisível), reinjetando os cookies capturados. A partir daqui a
+   rodada segue sem janelas na sua tela.
 
 **Requisitos:**
-- Máquina com display (não funciona em servidor headless / SSH sem
-  X forwarding)
-- Você fica no laptop até apertar o ENTER (depois pode sair)
+- Máquina com display para a janela de login (não funciona em
+  servidor headless / SSH sem X forwarding)
+- Você fica no laptop **apenas até apertar o ENTER**. Depois disso
+  o browser fecha e a rodada continua totalmente headless — pode
+  deixar o laptop de lado ou trabalhar em outra coisa.
 
 ### Opção 2 — JWT (Bearer token)
 

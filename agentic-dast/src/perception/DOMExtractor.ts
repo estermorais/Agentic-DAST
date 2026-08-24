@@ -51,6 +51,42 @@ export class DOMExtractor {
 
   /** Inicializa o browser Puppeteer com ou sem proxy ZAP */
   async launch(): Promise<void> {
+    // Se INTERACTIVE_LOGIN=true, abre janela visivel apenas para o
+    // login manual (MFA/SSO/CAPTCHA). Depois de capturar a sessao,
+    // o extract() chama restartHeadless() para fechar essa janela
+    // e reabrir em headless para o resto da rodada.
+    await this._launchInternal(!config.interactiveLogin);
+  }
+
+  /**
+   * Fecha o browser atual (tipicamente o visivel usado para login
+   * manual) e reabre em modo headless. Os cookies capturados do
+   * login precisam ser reinjetados pelo caller, ja que o browser
+   * novo comeca sem sessao.
+   */
+  async restartHeadless(cookiesToRestore: Record<string, string>): Promise<void> {
+    console.log('[Percepção] Fechando janela visivel e reabrindo browser em modo headless...');
+    await this.browser?.close();
+    await this._launchInternal(true);
+
+    if (Object.keys(cookiesToRestore).length > 0 && this.browser) {
+      const targetHost = new URL(config.browserBaseUrl).hostname;
+      const tmpPage = await this.browser.newPage();
+      try {
+        await tmpPage.setCookie(
+          ...Object.entries(cookiesToRestore).map(([name, value]) => ({
+            name, value, domain: targetHost, path: '/',
+          })),
+        );
+        console.log(`[Percepção] ${Object.keys(cookiesToRestore).length} cookie(s) reinjetado(s) no browser headless.`);
+      } finally {
+        await tmpPage.close();
+      }
+    }
+  }
+
+  /** Implementacao real do launch, extraida para permitir restart. */
+  private async _launchInternal(headless: boolean): Promise<void> {
     const args = ['--no-sandbox', '--disable-setuid-sandbox'];
 
     if (config.useZapProxy) {
@@ -72,14 +108,8 @@ export class DOMExtractor {
       console.log(`[Percepção] Usando proxy ZAP em ${config.zapProxyHost}:${config.zapProxyPort} (navegação via ${config.browserBaseUrl})`);
     }
 
-    this.browser = await puppeteer.launch({
-      // Se INTERACTIVE_LOGIN=true, abre janela visivel para o
-      // operador fazer login manual (MFA/SSO/CAPTCHA).
-      headless: !config.interactiveLogin,
-      args,
-    });
-
-    console.log('[Percepção] Browser iniciado.');
+    this.browser = await puppeteer.launch({ headless, args });
+    console.log(`[Percepção] Browser iniciado (headless=${headless}).`);
   }
 
   /** Fecha o browser ao final */
@@ -493,7 +523,12 @@ export class DOMExtractor {
    */
   private async applyManualSessionIfProvided(): Promise<AuthContext | null> {
     if (config.interactiveLogin) {
-      return await this.captureSessionAfterManualLogin();
+      const auth = await this.captureSessionAfterManualLogin();
+      // Fecha a janela visivel e reabre em headless para o resto da
+      // rodada (loop de rotas, HttpClient, etc). Os cookies capturados
+      // sao reinjetados no novo browser para manter a sessao ativa.
+      await this.restartHeadless(auth.cookies);
+      return auth;
     }
 
     const hasJwt     = !!config.manualJwt;
