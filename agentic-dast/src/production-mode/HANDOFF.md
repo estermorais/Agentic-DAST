@@ -42,7 +42,9 @@ alpha, não como release.
 
 ## Quickstart
 
-Assumindo Node 20+ instalado e OpenRouter API key disponível:
+Assumindo Node 20+ instalado, Claude Code CLI instalado
+(`claude login` feito com a conta Pro corporativa) e o alvo com
+autorização:
 
 ```bash
 git clone https://github.com/estermorais/Agentic-DAST.git
@@ -52,24 +54,41 @@ npm run build
 
 # Configure .env
 cat > .env <<EOF
-LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=sk-or-v1-...
+LLM_PROVIDER=claude-cli
 LLM_MODEL=claude-haiku-4-5-20251001
 TARGET_URL=https://alvo-autorizado.empresa.com
 BROWSER_BASE_URL=https://alvo-autorizado.empresa.com
 USE_ZAP_PROXY=false
 MAX_REACT_ITERATIONS=15
+
+# Autenticacao no alvo (escolha UMA das linhas abaixo):
+INTERACTIVE_LOGIN=true               # abre browser, voce loga uma vez
+# MANUAL_JWT=eyJhbGciOi...           # ou cole o Bearer token
+# MANUAL_COOKIES=SESSIONID=abc; ...  # ou cole os cookies de sessao
 EOF
 
 mkdir -p logs reports
 
-# Primeira rodada obrigatória: read-only, com humano no loop
+# Primeira rodada obrigatoria: read-only, com humano no loop
 READ_ONLY=true \
 INTERACTIVE=true \
 AUDIT_LOG=./logs/first-run.csv \
 SKIP_ABUSE_CASES=true \
 npm run start:production
 ```
+
+Ao iniciar, o framework vai abrir uma janela do Chromium (por
+causa do `INTERACTIVE_LOGIN=true`) e pedir que voce faca login
+manualmente. Depois de logada, volte ao terminal e pressione
+ENTER. O restante da rodada segue automatico com a sessao
+capturada.
+
+> **Sobre `INTERACTIVE` vs `INTERACTIVE_LOGIN`**: sao coisas
+> diferentes. `INTERACTIVE=true` pede aprovacao humana `[y/n]`
+> em cada acao destrutiva do agente durante a rodada.
+> `INTERACTIVE_LOGIN=true` abre o browser uma vez no inicio para
+> voce fazer o login manual e capturar a sessao. As duas podem
+> (e devem) ser usadas juntas em producao.
 
 Documentação completa: [`README.md`](./README.md) neste diretório.
 
@@ -366,9 +385,25 @@ READ_ONLY=true INTERACTIVE=false SKIP_ABUSE_CASES=true \
 MAX_REACT_ITERATIONS=3 npm run start:production
 ```
 
-### Primeira rodada em alvo autorizado
+### Primeira rodada em alvo autorizado (com MFA/SSO)
 
 ```bash
+INTERACTIVE_LOGIN=true \
+READ_ONLY=true INTERACTIVE=true \
+AUDIT_LOG=./logs/target-run-001.csv \
+SKIP_ABUSE_CASES=true \
+MAX_REACT_ITERATIONS=15 \
+npm run start:production
+```
+
+Ao iniciar, uma janela do Chromium abre para voce logar
+manualmente. Depois de dentro do CRM autenticada, ENTER no
+terminal e a rodada continua com a sessao capturada.
+
+### Primeira rodada em alvo autorizado (sem MFA, JWT copiado)
+
+```bash
+MANUAL_JWT="eyJhbGciOi..." \
 READ_ONLY=true INTERACTIVE=true \
 AUDIT_LOG=./logs/target-run-001.csv \
 SKIP_ABUSE_CASES=true \
@@ -464,6 +499,10 @@ ou do produto não será mencionado.
 - [ ] **Chave de API do provedor obtida e configurada no `.env`** (ou
       Ollama servindo modelo local)
 - [ ] Alvo confirmado no `.env` (`TARGET_URL` visto por 2 pessoas)
+- [ ] **Modo de autenticação escolhido** (`INTERACTIVE_LOGIN=true`
+      se o alvo tem MFA/SSO; `MANUAL_JWT` ou `MANUAL_COOKIES` se
+      preferir colar token; conta usada tem as permissões que você
+      quer testar)
 - [ ] Time de operação/SOC avisado do horário e IP de origem
 - [ ] Snapshot do banco (se aplicável)
 - [ ] Sanity check já executado (contra httpbin ou similar)
