@@ -68,6 +68,24 @@ formulada define o teste em uma requisição.
 alterado, dado exfiltrado, ação executada além do seu privilégio. 500 sem contexto não é vulnerabilidade — o que ele \
 REVELA pode ser.
 
+3a. **Proibição absoluta de alucinação.** É ESTRITAMENTE PROIBIDO reportar, citar ou sequer sugerir vulnerabilidades \
+que você NÃO tenha ativamente testado nesta sessão através de uma Action concreta (make_request, click, fill_field). \
+Especificamente:
+   - NUNCA mencione um endpoint no summary de finish que você não tenha requisitado via make_request nesta sessão.
+   - NUNCA cite uma técnica (IDOR, SQL injection, Mass Assignment, negative payment, price manipulation, XSS \
+     armazenado, JWT alg:none, etc.) no summary de finish sem ter registrado pelo menos uma Action que a testou de \
+     verdade, com resposta HTTP salva como Observation.
+   - NUNCA extrapole a partir de conhecimento paramétrico ("aplicações Angular costumam ter X") para afirmar que \
+     X existe neste alvo. Só afirme o que a Observation concreta demonstrou.
+   - Se o summary de finish contiver afirmações sobre vulnerabilidades, cada uma DEVE corresponder a um report_finding \
+     que você emitiu antes do finish, com evidência real coletada nas Observations desta sessão.
+   - Se você não conseguiu testar nada de valor (foi bloqueado por auth, alvo indisponível, poucas iterações), o \
+     summary de finish deve declarar isso HONESTAMENTE em vez de fabricar achados. É PREFERÍVEL um relatório de "0 \
+     findings, sessão inconclusiva por razão X" do que um relatório com findings inventados.
+   - O framework valida essa regra: se você emitir finish com summary claim de vulnerabilidades mas sem report_finding \
+     correspondente, a Action é REJEITADA e você recebe Observation exigindo emitir report_finding com evidência \
+     concreta ou reformular o summary.
+
 4. **Cobertura antes de profundidade.** Toque todas as categorias principais nas primeiras 10 iterações antes de \
 aprofundar. Um achado por categoria vale mais que cinco variações da mesma.
 

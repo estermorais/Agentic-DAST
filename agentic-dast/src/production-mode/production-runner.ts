@@ -39,6 +39,7 @@ import { ZapClient }                 from '../auditor/ZapClient';
 import { config }                    from '../config';
 
 import { SafeDispatcher } from './SafeDispatcher';
+import { summaryClaimsVulnerabilities } from '../cognitive/ReActAgent';
 
 function parseEnvBool(name: string, defaultValue: boolean): boolean {
   const v = process.env[name];
@@ -189,6 +190,16 @@ function printReport(
 
   if (allFindings.length === 0) {
     console.log('\nNenhuma vulnerabilidade encontrada.');
+    if (summaryClaimsVulnerabilities(agentResult.summary)) {
+      console.log('');
+      console.log('⚠️  AVISO: o summary do agente afirma vulnerabilidades');
+      console.log('    (palavras como CRITICAL, IDOR, XSS, etc.), mas nenhum');
+      console.log('    finding estruturado foi materializado via');
+      console.log('    Action:report_finding. Provavel alucinacao do LLM.');
+      console.log('    NAO confie no summary; revise os steps manualmente');
+      console.log('    para verificar cada afirmacao contra o que foi de');
+      console.log('    fato testado.');
+    }
     return;
   }
 
@@ -215,12 +226,34 @@ function saveReport(
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename  = path.join(reportsDir, `report-production-${timestamp}.json`);
 
+  // Warning anti-alucinacao: se o summary do finish afirma vulnerabilidades
+  // mas nenhum finding estruturado foi materializado, adiciona um flag
+  // explicito no relatorio. Segunda linha de defesa; a primeira e o guard
+  // no ReActAgent que rejeita finish nessas condicoes, mas se o LLM
+  // insistir apos os retries e conseguir emitir mesmo assim, o warning
+  // sinaliza ao leitor do relatorio.
+  const suspectedHallucination =
+    allFindings.length === 0 && summaryClaimsVulnerabilities(agentResult.summary);
+  if (suspectedHallucination) {
+    console.warn(
+      '\n[AVISO] O summary do agente contem afirmacoes de vulnerabilidades ' +
+      'mas nenhum finding estruturado foi materializado. Provavel alucinacao ' +
+      'do LLM. Nao confie no summary sem verificar os steps manualmente.\n'
+    );
+  }
+
   const report = {
     mode:            'production',
     generatedAt:     new Date().toISOString(),
     summary:         agentResult.summary,
     finishedCleanly: agentResult.finishedCleanly,
     totalIterations: agentResult.totalIterations,
+    warnings:        suspectedHallucination ? [
+      'suspected-hallucination: summary claims vulnerabilities but no ' +
+      'structured findings were emitted via Action:report_finding. Do not ' +
+      'trust the summary at face value; review the steps array manually to ' +
+      'verify each claim against actual HTTP responses recorded.'
+    ] : [],
     config: {
       readOnly:    parseEnvBool('READ_ONLY', false),
       interactive: parseEnvBool('INTERACTIVE', true),

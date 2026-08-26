@@ -18,7 +18,7 @@ import * as path from 'path';
 
 import { DOMExtractor }    from './perception/DOMExtractor';
 import { ActionDispatcher } from './executor/ActionDispatcher';
-import { ReActAgent, AgentResult } from './cognitive/ReActAgent';
+import { ReActAgent, AgentResult, summaryClaimsVulnerabilities } from './cognitive/ReActAgent';
 import { runAbuseCases }   from './executor/tasks/runner';
 import { ZapClient }       from './auditor/ZapClient';
 import { Finding }         from './executor/ActionDispatcher';
@@ -173,11 +173,18 @@ function saveReport(
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename  = path.join(reportsDir, `report-${timestamp}.json`);
 
+  const suspectedHallucination =
+    allFindings.length === 0 && summaryClaimsVulnerabilities(agentResult.summary);
+
   const report = {
     generatedAt:      new Date().toISOString(),
     summary:          agentResult.summary,
     finishedCleanly:  agentResult.finishedCleanly,
     totalIterations:  agentResult.totalIterations,
+    warnings:         suspectedHallucination ? [
+      'suspected-hallucination: summary claims vulnerabilities but no ' +
+      'structured findings were emitted via Action:report_finding.'
+    ] : [],
     findingsSummary: {
       reactAgent:  agentResult.findings.length,
       abuseCases:  abuseFindings.length,

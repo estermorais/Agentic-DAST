@@ -15,6 +15,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReActAgent = void 0;
+exports.summaryClaimsVulnerabilities = summaryClaimsVulnerabilities;
 const config_1 = require("../config");
 const prompts_1 = require("./prompts");
 const LLMClient_1 = require("./LLMClient");
@@ -101,9 +102,34 @@ class ReActAgent {
             if (parsed.action.action === 'finish') {
                 const summary = parsed.action.summary
                     ?? 'Testes concluídos.';
+                const currentFindings = this.dispatcher.getFindings();
+                // 4a. Guarda anti-alucinacao: se o summary contem afirmacoes de
+                // vulnerabilidades mas nenhum report_finding foi emitido nesta
+                // sessao, o finish e rejeitado. O agente recebe uma observation
+                // exigindo que emita report_finding real ou que reformule o
+                // summary sem afirmar findings. Evita o padrao de "LLM inventa
+                // 8 vulns no summary de finish para parecer produtivo".
+                if (currentFindings.length === 0 && summaryClaimsVulnerabilities(summary)) {
+                    console.warn('[Cognitivo] Finish rejeitado: summary afirma vulnerabilidades mas ' +
+                        'nenhum report_finding foi emitido. Devolvendo ao LLM para corrigir.');
+                    this.conversationHistory.push({
+                        role: 'user',
+                        content: (0, prompts_1.buildObservationMessage)('REJEITADO: seu summary de finish contem afirmacoes de vulnerabilidades ' +
+                            '(palavras como CRITICAL, HIGH, IDOR, SQL injection, XSS, vulnerability, ' +
+                            'etc.) mas voce NAO emitiu nenhum Action:report_finding nesta sessao. ' +
+                            'Regra 3a do system prompt: proibicao absoluta de alucinacao. Voce tem ' +
+                            'duas opcoes: (a) se realmente encontrou vulnerabilidades, emita agora ' +
+                            'um Action:report_finding para CADA uma, com titulo/severidade/categoria/' +
+                            'evidencia real coletada das Observations desta sessao; (b) se nao ' +
+                            'encontrou nada testavel, emita Action:finish com summary HONESTO que ' +
+                            'declare "0 findings, sessao inconclusiva porque X" — nao invente ' +
+                            'achados. Nao ha terceira opcao.'),
+                    });
+                    continue; // volta ao loop, LLM tenta de novo
+                }
                 console.log(`\n[Cognitivo] Agente encerrou: ${summary}`);
                 return {
-                    findings: this.dispatcher.getFindings(),
+                    findings: currentFindings,
                     steps,
                     totalIterations: i,
                     finishedCleanly: true,
@@ -266,5 +292,55 @@ function extractFirstJsonObject(text) {
         }
     }
     return null; // objeto nao fechado (LLM truncou)
+}
+/**
+ * Heuristica anti-alucinacao. Retorna true se o texto do summary
+ * emitido junto com Action:finish contem afirmacoes de vulnerabilidades.
+ * Usado para rejeitar finish quando o LLM tenta encerrar afirmando
+ * vulns sem ter emitido report_finding formal (padrao de alucinacao
+ * observado no Haiku em prompts grandes de pentest).
+ *
+ * Falsos positivos aqui sao aceitaveis (leva a mais rounds de reflexao,
+ * nao a falhas silenciosas); falsos negativos deixam alucinacoes
+ * passarem, entao a lista e propositalmente ampla.
+ */
+function summaryClaimsVulnerabilities(summary) {
+    const text = summary.toLowerCase();
+    const keywords = [
+        // Severidades OWASP explicitas
+        'critical', 'critico', 'crítico',
+        'high severity', 'severidade alta', 'severidade high',
+        'medium severity',
+        // Termos genericos de vulnerabilidade
+        'vulnerability', 'vulnerabilidade', 'vulneráveis', 'vulneraveis',
+        'exploit ', 'exploitable', 'exploravel', 'explorável',
+        'security flaw', 'falha de seguranca', 'falha de segurança',
+        // Classes de ataque mais comuns
+        'sql injection', 'sqli',
+        'xss', 'cross-site scripting', 'cross site scripting',
+        'idor', 'insecure direct object',
+        'ssrf', 'server-side request forgery',
+        'csrf', 'cross-site request forgery',
+        'rce', 'remote code execution',
+        'xxe', 'xml external entity',
+        'path traversal', 'directory traversal',
+        'command injection',
+        'mass assignment',
+        'privilege escalation', 'escalacao de privilegio', 'escalação de privilégio',
+        'account takeover', 'ato ',
+        'authentication bypass', 'auth bypass',
+        'jwt', 'alg:none', 'algorithm confusion',
+        'stored xss', 'reflected xss', 'dom xss',
+        'business logic',
+        'race condition',
+        'deserialization',
+        'user enumeration', 'enumeracao de usuario',
+        'information disclosure', 'exposicao de dados', 'exposição de dados',
+        'sensitive data exposure',
+        'broken access control',
+        'weak crypto', 'criptografia fraca',
+        'default credential', 'credencial padrao',
+    ];
+    return keywords.some((k) => text.includes(k));
 }
 //# sourceMappingURL=ReActAgent.js.map

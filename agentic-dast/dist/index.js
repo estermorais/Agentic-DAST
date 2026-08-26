@@ -174,11 +174,16 @@ function saveReport(agentResult, abuseFindings, zapFindings, allFindings) {
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = path.join(reportsDir, `report-${timestamp}.json`);
+    const suspectedHallucination = allFindings.length === 0 && (0, ReActAgent_1.summaryClaimsVulnerabilities)(agentResult.summary);
     const report = {
         generatedAt: new Date().toISOString(),
         summary: agentResult.summary,
         finishedCleanly: agentResult.finishedCleanly,
         totalIterations: agentResult.totalIterations,
+        warnings: suspectedHallucination ? [
+            'suspected-hallucination: summary claims vulnerabilities but no ' +
+                'structured findings were emitted via Action:report_finding.'
+        ] : [],
         findingsSummary: {
             reactAgent: agentResult.findings.length,
             abuseCases: abuseFindings.length,
