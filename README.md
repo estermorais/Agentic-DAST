@@ -47,48 +47,32 @@ A camada `LLMClient` desacopla o *loop* ReAct do provedor concreto de LLM. As du
 .
 ├── README.md
 │
-├── agentic-dast/                              ← Código do framework
-│   ├── src/                                   ← TypeScript (fonte autoritativo)
-│   │   ├── index.ts                           ← Orquestrador do Cenário C
-│   │   ├── config.ts
-│   │   ├── perception/                        ← DOMExtractor + AppMap
-│   │   ├── cognitive/                         ← ReActAgent + LLMClient
-│   │   ├── executor/                          ← Actor, Abilities, Abuse Cases
-│   │   ├── auditor/                           ← ZapClient
-│   │   ├── scenarios/                         ← Cenários A, B e D
-│   │   │   ├── scenario-a.ts                  ← ZAP tradicional
-│   │   │   ├── scenario-b.ts                  ← ZAP + Puppeteer E2E
-│   │   │   ├── scenario-d.ts                  ← PentestGPT (controle)
-│   │   │   └── pentestgpt/                    ← Adaptador Python do PentestGPT
-│   │   └── evaluation/                        ← Pipeline de avaliação
-│   │       ├── ground-truth.json              ← 18 vulnerabilidades de referência
-│   │       ├── categories.ts
-│   │       ├── classify.ts                    ← TP / FP / FN
-│   │       ├── metrics.ts                     ← Precisão, Revocação, F1, F2
-│   │       └── evaluate.ts                    ← CLI de avaliação
-│   ├── dist/                                  ← JavaScript compilado
-│   ├── docs/                                  ← Documentação técnica
-│   ├── docker-compose.yml                     ← Juice Shop + ZAP
-│   ├── package.json
-│   └── tsconfig.json
-│
-└── docs/                                      ← Documentação acadêmica
-    ├── artigo/
-    │   ├── artigo_agentic_dast.tex            ← Artigo TCC (formato SBC)
-    │   ├── pre_projeto_agentic_dast.tex
-    │   ├── referencias.bib
-    │   ├── sbc-template.sty                   ← Template oficial da SBC
-    │   └── sbc.bst
-    ├── metodologia/
-    │   ├── metodologia_aa1.tex                ← AA1 — Proposta e Trabalhos Relacionados
-    │   ├── metodologia_aa2.tex                ← AA2 — Metodologia da Pesquisa
-    │   ├── metodologia_aa3.tex                ← AA3 — Resumo e Introdução
-    │   ├── protocolo_experimental.tex/.md     ← Protocolo do experimento
-    │   ├── pitch_seminario.tex                ← Slides do pitch (Beamer)
-    │   └── pitch_roteiro.md                   ← Roteiro do vídeo pitch
-    └── apresentacao/
-        ├── APRESENTACAO_ORIENTADOR.md
-        └── MAPA_DO_PROJETO.md
+└── agentic-dast/                              ← Código do framework
+    ├── src/                                   ← TypeScript (fonte autoritativo)
+    │   ├── index.ts                           ← Orquestrador do Cenário C
+    │   ├── config.ts
+    │   ├── perception/                        ← DOMExtractor + AppMap
+    │   ├── cognitive/                         ← ReActAgent + LLMClient
+    │   ├── executor/                          ← Actor, Abilities, Abuse Cases
+    │   ├── auditor/                           ← ZapClient
+    │   ├── production-mode/                   ← Camada de produção + Target Profile
+    │   ├── scenarios/                         ← Cenários A, B e D
+    │   │   ├── scenario-a.ts                  ← ZAP tradicional
+    │   │   ├── scenario-b.ts                  ← ZAP + Puppeteer E2E
+    │   │   ├── scenario-d.ts                  ← PentestGPT (controle)
+    │   │   └── pentestgpt/                    ← Adaptador Python do PentestGPT
+    │   └── evaluation/                        ← Pipeline de avaliação
+    │       ├── ground-truth.json              ← 18 vulnerabilidades de referência
+    │       ├── categories.ts
+    │       ├── classify.ts                    ← TP / FP / FN
+    │       ├── metrics.ts                     ← Precisão, Revocação, F1, F2
+    │       └── evaluate.ts                    ← CLI de avaliação
+    ├── dist/                                  ← JavaScript compilado
+    ├── docs/                                  ← Documentação técnica
+    ├── targets/                               ← Target Profiles (perfis de alvo)
+    ├── docker-compose.yml                     ← Juice Shop + ZAP
+    ├── package.json
+    └── tsconfig.json
 ```
 
 ---
@@ -204,11 +188,10 @@ Teste de **Wilcoxon *signed-rank*** pareado para os pares (A, C), (B, C) e (C, D
 
 | Documento | Conteúdo |
 |---|---|
-| [`docs/artigo/artigo_agentic_dast.tex`](docs/artigo/artigo_agentic_dast.tex) | Artigo TCC no formato oficial da SBC |
-| [`docs/metodologia/protocolo_experimental.md`](docs/metodologia/protocolo_experimental.md) | Protocolo experimental detalhado (versão para leitura no GitHub) |
-| [`docs/apresentacao/APRESENTACAO_ORIENTADOR.md`](docs/apresentacao/APRESENTACAO_ORIENTADOR.md) | Visão geral para reuniões com o orientador |
-| [`docs/apresentacao/MAPA_DO_PROJETO.md`](docs/apresentacao/MAPA_DO_PROJETO.md) | Referência completa de cada arquivo do repositório |
 | [`agentic-dast/docs/DOCUMENTACAO.md`](agentic-dast/docs/DOCUMENTACAO.md) | Documentação técnica do *framework* |
+| [`agentic-dast/docs/PSEUDOCODIGO.md`](agentic-dast/docs/PSEUDOCODIGO.md) | Pseudocódigo dos componentes principais |
+| [`agentic-dast/src/production-mode/HANDOFF.md`](agentic-dast/src/production-mode/HANDOFF.md) | Guia de uso em produção (red team) |
+| [`agentic-dast/src/production-mode/README.md`](agentic-dast/src/production-mode/README.md) | Referência do modo produção e do Target Profile |
 | [`agentic-dast/src/scenarios/pentestgpt/README.md`](agentic-dast/src/scenarios/pentestgpt/README.md) | Setup do adaptador do Cenário D |
 
 ---

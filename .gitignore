@@ -55,5 +55,6 @@ Thumbs.db
 .claude/
 
 # Documentação de TCC / artigo / metodologia — específica das atividades
-# acadêmicas, não faz parte do agente público.
-docs/
+# acadêmicas, não faz parte do agente público. Ancorado na raiz (barra
+# inicial) para NÃO afetar agentic-dast/docs/ (documentação técnica).
+/docs/
