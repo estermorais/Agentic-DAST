@@ -196,10 +196,16 @@ compartilhado como despesa de projeto de segurança.
 
 ## Autenticação em alvos com MFA / SSO / CAPTCHA
 
-O `DOMExtractor` (Fase 1) tentaria fazer login automatizado usando
-credenciais e rotas hardcoded do OWASP Juice Shop. Em qualquer alvo
-real com MFA ou SSO, isso **não funciona** — Puppeteer não consegue
-passar o segundo fator sozinho.
+> **Nota (modo produção):** a Fase 1 em `npm run start:production` usa o
+> `ProductionPerception` (não o `DOMExtractor`, que é o extrator validado
+> sobre o Juice Shop e permanece **intocado**). O `ProductionPerception`
+> **não** tenta login automático com credenciais hardcoded — em alvo real
+> quem faz o login é você (via `INTERACTIVE_LOGIN` ou `MANUAL_*`). Ele
+> também descobre as rotas por **crawl real** do alvo, em vez da lista
+> fixa de rotas do Juice Shop.
+
+Em qualquer alvo real com MFA ou SSO, login automatizado **não funciona**
+— Puppeteer não consegue passar o segundo fator sozinho.
 
 **Solução**: três alternativas, escolha a mais prática pro seu contexto.
 Todas resultam na mesma coisa (sessão autenticada disponível no
@@ -220,9 +226,9 @@ Prioridade se mais de uma estiver preenchida: `INTERACTIVE_LOGIN`
 vence `MANUAL_JWT`/`MANUAL_COOKIES`.
 
 Em qualquer dos três, o framework:
-- Pula o fluxo de login automático hardcoded do Juice Shop
-- Injeta os cookies no Puppeteer antes da Fase 1 (Percepção
-  autenticada)
+- Não executa login automático (não há credenciais hardcoded no modo
+  produção)
+- Injeta a sessão no Puppeteer antes da Fase 1 (Percepção autenticada)
 - Injeta JWT e Cookie como headers default no HttpClient (todas as
   requests do agente saem já autenticadas)
 
@@ -257,13 +263,19 @@ Ao iniciar `npm run start:production`, o framework vai:
    ```
 3. Aguardar você fazer o login manualmente na janela
 4. Após você pressionar ENTER no terminal, capturar automaticamente:
-   - Todos os cookies do domínio do alvo
-   - JWT do `localStorage`/`sessionStorage` (tenta `token`, `jwt`,
-     `accessToken`, `access_token`, `authToken`, `auth_token`,
-     `idToken`, `id_token`)
+   - **Todos os cookies de todos os domínios** (via CDP
+     `Network.getAllCookies`) — inclui cookies de sessão emitidos por
+     subdomínios de auth/SSO, não só do host do alvo
+   - `localStorage` **e** `sessionStorage` da origem autenticada (onde
+     ficam os tokens OAuth de SPAs modernas)
 5. **Fechar a janela visível** e reabrir o browser em modo headless
-   (invisível), reinjetando os cookies capturados. A partir daqui a
-   rodada segue sem janelas na sua tela.
+   (invisível), restaurando a sessão completa: cookies com o
+   domínio/path originais **e** o storage reescrito na origem correta.
+   Em seguida **verifica** se a sessão sobreviveu — se o alvo carregar
+   autenticado, mostra `Sessão verificada: alvo carregou autenticado. ✓`;
+   se redirecionar para o login/OAuth, emite um **aviso** explícito (o
+   token pode estar num cookie/origem que ainda escapou). A partir daqui
+   a rodada segue sem janelas na sua tela.
 
 **Requisitos:**
 - Máquina com display para a janela de login (não funciona em
@@ -347,6 +359,80 @@ MANUAL_COOKIES=XSRF-TOKEN=def456; tenant=acme
 
 ---
 
+## Perfil do alvo (Target Profile) — opcional, recomendado
+
+Um alvo atrás de OAuth/SSO só revela, pelo crawl, os endpoints que a UI
+dispara. Endpoints admin-only, versões antigas de API e rotas sem link
+na tela não aparecem. Como o red team costuma ter acesso ao **código-fonte
+do alvo**, dá para descrever a superfície de ataque **autoritativa** num
+arquivo JSON — o *Target Profile* — que o `ProductionPerception` semeia no
+AppMap antes do crawl (perfil = verdade; crawl = confirma e traz os tokens
+de sessão vivos).
+
+Benefícios: cobre a superfície que o crawl não alcança, **reduz alucinação**
+(o agente recebe a lista real de endpoints legítimos, em vez de inventar) e
+mantém o teste **on-scope** via `scope.excludePaths`.
+
+> É **opcional**: sem `TARGET_PROFILE`, a rodada roda normalmente só com o
+> crawl. O perfil só torna o agente mais certeiro.
+
+### Passo 1 — gerar o perfil a partir do código-fonte do alvo
+
+Aponte o gerador para o checkout do repositório do alvo. Ele **detecta a
+stack sozinho** (Angular/React/Vue no front; Express/NestJS/Flask/FastAPI/
+Django/Rails no back) e extrai rotas e endpoints:
+
+```bash
+npm run gen:profile -- /caminho/do/repo-do-alvo targets/meu-alvo.json meu-alvo
+```
+
+Saída: `targets/meu-alvo.json` com as rotas e endpoints encontrados
+(com `authRequired` inferido por-rota).
+
+> A extração é **heurística** (regex sobre o fonte) — é um ponto de
+> partida para revisar, não uma fonte final.
+
+### Passo 2 — revisar o JSON
+
+Abra o arquivo e ajuste principalmente:
+- `authRequired` de cada endpoint (confirme os que exigem sessão);
+- `params` (query/body/path) que o agente deve enviar;
+- marque `idor: true` em recursos com id direto na URL (candidatos a
+  IDOR/BOLA);
+- `scope.excludePaths` — paths que **nunca** devem ser tocados
+  (ex.: `"*/logout"`, `"/api/*/delete"`).
+
+Veja [`../../targets/dito-survey.example.json`](../../targets/dito-survey.example.json)
+como referência de formato. O schema completo está em
+[`TargetProfile.ts`](./TargetProfile.ts).
+
+### Passo 3 — rodar apontando para o perfil
+
+Mesmo comando de sempre, com **uma** variável a mais no começo:
+
+```bash
+TARGET_PROFILE=targets/meu-alvo.json \
+INTERACTIVE_LOGIN=true \
+READ_ONLY=true INTERACTIVE=true \
+AUDIT_LOG=./logs/target-run-001.csv \
+SKIP_ABUSE_CASES=true \
+MAX_REACT_ITERATIONS=15 \
+npm run start:production
+```
+
+Variáveis relacionadas:
+- `TARGET_PROFILE` — caminho do JSON do perfil (ausente = só crawl).
+- `CRAWL_MAX_PAGES` — limite de páginas do crawl (default 25).
+
+> **Limitação honesta:** hoje o prompt do agente (núcleo, intocado) só
+> expõe `method`/`url`/`authRequired` dos endpoints e `path`/`title`/
+> `requiresAuth` das rotas. Por isso `params`/`roles`/`notes` do perfil são
+> embutidos nesses campos (exemplos de query na `url`, papéis no `title`) e
+> o restante fica guardado no AppMap para relatório. Levar o perfil inteiro
+> ao LLM exigiria estender o prompt do núcleo — decisão à parte.
+
+---
+
 ## Limitações que o red team precisa conhecer
 
 Cinco pontos que o módulo `production-mode` NÃO resolve:
@@ -370,11 +456,13 @@ Cinco pontos que o módulo `production-mode` NÃO resolve:
    produção.** Se esquecer, 8 exploits específicos do Juice Shop
    vão tentar executar contra o alvo.
 
-5. **`DOMExtractor` (fase 1) faz login automático e navegação inicial
-   sem passar pelo `SafeDispatcher`.** Isso é considerado seguro para
-   alvos que aceitam login normal, mas se o alvo tem lógica de negócio
-   que dispara efeito colateral no login (webhook de "user logged in",
-   por exemplo), avalie desativar essa fase manualmente.
+5. **`ProductionPerception` (fase 1) faz o crawl inicial sem passar
+   pelo `SafeDispatcher`.** O crawl é só navegação (GET) na mesma origem
+   do alvo, respeitando `scope.excludePaths` do perfil quando fornecido.
+   Ainda assim, se o alvo tem lógica de negócio que dispara efeito
+   colateral só de abrir uma rota (webhook de "user logged in", contador
+   de visita, etc.), avalie limitar o crawl com `CRAWL_MAX_PAGES` ou
+   restringir o escopo no Target Profile.
 
 ---
 
@@ -402,6 +490,10 @@ npm run start:production
 Ao iniciar, uma janela do Chromium abre para voce logar
 manualmente. Depois de dentro do CRM autenticada, ENTER no
 terminal e a rodada continua com a sessao capturada.
+
+> Para um teste mais certeiro, gere antes um **Target Profile** do alvo
+> (`npm run gen:profile`) e adicione `TARGET_PROFILE=targets/meu-alvo.json`
+> ao comando. Ver seção "Perfil do alvo (Target Profile)".
 
 ### Primeira rodada em alvo autorizado (sem MFA, JWT copiado)
 
