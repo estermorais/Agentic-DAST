@@ -1,0 +1,49 @@
+{
+  "name": "dito-survey",
+  "baseUrl": "https://app.dito.com.br/cx/survey/?brand=dito-redteam",
+  "apiBaseUrl": "https://openapi.dito.com.br",
+  "framework": "Angular",
+
+  "scope": {
+    "includeHosts": ["app.dito.com.br", "openapi.dito.com.br"],
+    "excludePaths": ["*/logout", "*/delete", "/api/*/destroy"]
+  },
+
+  "routes": [
+    { "path": "#/survey",  "title": "Survey",        "requiresAuth": true },
+    { "path": "#/profile", "title": "User profile",  "requiresAuth": true },
+    { "path": "#/admin",   "title": "Admin console", "requiresAuth": true, "roles": ["admin"] }
+  ],
+
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/contact",
+      "authRequired": false,
+      "params": [
+        { "name": "name",    "in": "body", "type": "string" },
+        { "name": "email",   "in": "body", "type": "string" },
+        { "name": "message", "in": "body", "type": "string" }
+      ],
+      "notes": "message e refletido na resposta? candidato a stored XSS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/survey/{id}",
+      "authRequired": true,
+      "idor": true,
+      "params": [{ "name": "id", "in": "path", "type": "int" }],
+      "notes": "id sequencial -> BOLA: tentar ids adjacentes ao proprio"
+    },
+    {
+      "method": "GET",
+      "path": "/api/survey",
+      "authRequired": true,
+      "params": [{ "name": "page", "in": "query", "type": "int", "example": "1" }]
+    }
+  ],
+
+  "auth": { "type": "oauth", "tokenLocation": "localStorage" },
+
+  "notes": "Params nomeados url/redirect/callback -> checar SSRF/open redirect. API versionada: tentar /api/v1 anterior."
+}

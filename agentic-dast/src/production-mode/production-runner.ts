@@ -31,7 +31,7 @@
 import * as fs   from 'fs';
 import * as path from 'path';
 
-import { DOMExtractor }              from '../perception/DOMExtractor';
+import { ProductionPerception }      from './ProductionPerception';
 import { ActionDispatcher, Finding } from '../executor/ActionDispatcher';
 import { ReActAgent, AgentResult }   from '../cognitive/ReActAgent';
 import { runAbuseCases }             from '../executor/tasks/runner';
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const extractor = new DOMExtractor();
+  const extractor = new ProductionPerception();
   const zapClient = new ZapClient();
   let dispatcher: ActionDispatcher | null = null;
   let safeDispatcher: SafeDispatcher | null = null;

@@ -13,7 +13,8 @@
     "start:production": "node dist/production-mode/production-runner.js",
     "evaluate": "node dist/evaluation/evaluate.js",
     "build": "tsc && node -e \"require('fs').copyFileSync('src/evaluation/ground-truth.json', 'dist/evaluation/ground-truth.json'); require('fs').mkdirSync('dist/scenarios/pentestgpt', { recursive: true }); require('fs').copyFileSync('src/scenarios/pentestgpt/run_pentestgpt.py', 'dist/scenarios/pentestgpt/run_pentestgpt.py')\"",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "gen:profile": "node dist/production-mode/tools/generate-target-profile.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

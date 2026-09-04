@@ -64,7 +64,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-const DOMExtractor_1 = require("../perception/DOMExtractor");
+const ProductionPerception_1 = require("./ProductionPerception");
 const ActionDispatcher_1 = require("../executor/ActionDispatcher");
 const ReActAgent_1 = require("../cognitive/ReActAgent");
 const runner_1 = require("../executor/tasks/runner");
@@ -105,7 +105,7 @@ async function main() {
         console.warn('[AVISO] READ_ONLY=false e INTERACTIVE=false — nenhuma proteção ativa. ' +
             'Isso equivale ao modo oficial. Continue apenas se for intencional.\n');
     }
-    const extractor = new DOMExtractor_1.DOMExtractor();
+    const extractor = new ProductionPerception_1.ProductionPerception();
     const zapClient = new ZapClient_1.ZapClient();
     let dispatcher = null;
     let safeDispatcher = null;

@@ -89,6 +89,13 @@ class SafeDispatcher {
         if (this.breakerTripped) {
             return 'Circuit breaker ativo: sessão encerrada após atingir limite de findings HIGH/CRITICAL. Emita finish.';
         }
+        // O ActionDispatcher oficial chama severity.toUpperCase() sem checar
+        // undefined (ActionDispatcher.normalizeSeverity). Quando o LLM emite
+        // report_finding sem 'severity' (ou sem outros campos obrigatorios),
+        // isso lança "Cannot read properties of undefined". Como nao podemos
+        // tocar no core, saneamos a ação aqui, na camada de produção, antes
+        // de repassá-la — preenchendo defaults seguros.
+        action = sanitizeAction(action);
         const classification = (0, RiskClassifier_1.classifyActionRisk)(action);
         // Modo read-only: bloqueia qualquer coisa fora do SAFE
         if (this.opts.readOnly && classification.level !== 'safe') {
@@ -169,6 +176,34 @@ class SafeDispatcher {
     }
 }
 exports.SafeDispatcher = SafeDispatcher;
+/**
+ * Preenche campos ausentes de report_finding para que o
+ * ActionDispatcher oficial nao quebre em normalizeSeverity() nem em
+ * outros acessos a campos obrigatorios. Nao altera acoes de outros
+ * tipos. Severity vazia vira 'INFO' (mesmo default do core quando o
+ * valor nao casa com CRITICAL/HIGH/MEDIUM/LOW).
+ */
+function sanitizeAction(action) {
+    if (action.action !== 'report_finding')
+        return action;
+    const validSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
+    const rawSeverity = typeof action.severity === 'string' ? action.severity.trim() : '';
+    const severity = validSeverities.includes(rawSeverity.toUpperCase())
+        ? rawSeverity
+        : 'INFO';
+    return {
+        ...action,
+        title: nonEmpty(action.title, '(sem título)'),
+        severity,
+        category: nonEmpty(action.category, 'Uncategorized'),
+        description: nonEmpty(action.description, ''),
+        steps: Array.isArray(action.steps) ? action.steps : [],
+        evidence: typeof action.evidence === 'string' ? action.evidence : '',
+    };
+}
+function nonEmpty(value, fallback) {
+    return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+}
 function csvEscape(s) {
     if (!s)
         return '';
