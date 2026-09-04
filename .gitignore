@@ -53,3 +53,7 @@ Thumbs.db
 
 # Claude Code
 .claude/
+
+# Documentação de TCC / artigo / metodologia — específica das atividades
+# acadêmicas, não faz parte do agente público.
+docs/
