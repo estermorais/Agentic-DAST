@@ -66,6 +66,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductionPerception = void 0;
 const puppeteer_1 = __importDefault(require("puppeteer"));
+const axios_1 = __importDefault(require("axios"));
 const readline = __importStar(require("readline"));
 const config_1 = require("../config");
 const TargetProfile_1 = require("./TargetProfile");
@@ -113,6 +114,11 @@ class ProductionPerception {
         ]);
         const observedHosts = this.collectObservedHosts(apiEndpoints);
         auth.cookies = this.filterCookiesForHosts(this.lastCapturedCookies, observedHosts);
+        // Corrige authRequired: como o crawl roda autenticado, todo endpoint
+        // volta 200 => authRequired:false (enganoso). Re-sonda cada GET SEM
+        // sessao para inferir o valor real (e expor endpoints genuinamente
+        // publicos = candidatos a Broken Access Control).
+        await this.probeAuthRequirement(apiEndpoints);
         const framework = this.profile?.framework ?? (await this.detectFramework());
         const appMap = {
             baseUrl: this.targetUrl,
@@ -664,6 +670,77 @@ class ProductionPerception {
                 dict[c.name] = c.value;
         }
         return dict;
+    }
+    /**
+     * Re-sonda cada endpoint GET SEM a sessao (sem cookies/JWT) para
+     * inferir o authRequired real. O crawl da Fase 1 roda autenticado, o
+     * que faz todo endpoint retornar 200 e ser marcado authRequired:false
+     * — enganoso. Aqui, uma requisicao anonima diz a verdade:
+     *
+     *   - 401/403 ou redirect (3xx p/ login)         -> authRequired = true
+     *   - 2xx com JSON (a API respondeu de fato)      -> authRequired = false (publico)
+     *   - 2xx HTML (shell da SPA / catch-all), 404,
+     *     erro de rede, etc.                          -> authRequired = true (conservador)
+     *
+     * Seguranca: so GET, so mesmo dominio registravel do alvo (nao sonda
+     * terceiros como facebook/pendo), respeita scope.excludePaths, com
+     * rate limit. Nao usa nem afeta a sessao autenticada (axios proprio,
+     * sem cookies). Pode ser desativada com SKIP_AUTH_PROBE=true.
+     */
+    async probeAuthRequirement(endpoints) {
+        if (config_1.config.skipAuthProbe)
+            return;
+        // Se a rodada e anonima (sem sessao), o authRequired do crawl ja e
+        // confiavel — nada a corrigir.
+        const authenticated = this.lastCapturedCookies.length > 0 || !!config_1.config.manualJwt || config_1.config.interactiveLogin;
+        if (!authenticated)
+            return;
+        const targetParent = this.targetHost.split('.').slice(1).join('.');
+        const sameSite = (host) => !!host &&
+            (host === this.targetHost ||
+                host === targetParent ||
+                (targetParent.length > 0 && host.endsWith(`.${targetParent}`)));
+        const probeable = endpoints.filter((e) => e.method.toUpperCase() === 'GET' &&
+            sameSite(safeHost(e.url)) &&
+            !this.isExcludedByScope(e.url));
+        if (probeable.length === 0)
+            return;
+        console.log(`[Percepção/prod] Re-sondando ${probeable.length} endpoint(s) GET sem auth ` +
+            `para inferir authRequired real...`);
+        let publicos = 0;
+        for (const ep of probeable) {
+            try {
+                const res = await axios_1.default.get(ep.url, {
+                    validateStatus: () => true,
+                    timeout: 10_000,
+                    maxRedirects: 0,
+                    // Sem headers de sessao: requisicao deliberadamente anonima.
+                    headers: { Accept: 'application/json, text/plain, */*' },
+                });
+                const status = res.status;
+                const contentType = String(res.headers['content-type'] ?? '');
+                if (status === 401 || status === 403) {
+                    ep.authRequired = true;
+                }
+                else if (status >= 300 && status < 400) {
+                    ep.authRequired = true; // redirect (tipicamente para login/SSO)
+                }
+                else if (status >= 200 && status < 300 && contentType.includes('application/json')) {
+                    ep.authRequired = false; // a API respondeu de fato, sem auth
+                    publicos++;
+                }
+                else {
+                    // 2xx HTML (shell da SPA), 404, 5xx: nao confirma acesso publico.
+                    ep.authRequired = true;
+                }
+            }
+            catch {
+                // Timeout / erro de rede: mantem o valor derivado do crawl.
+            }
+            await sleep(300);
+        }
+        console.log(`[Percepção/prod] Re-sondagem concluida: ${publicos} endpoint(s) respondem ` +
+            `JSON SEM auth (candidatos a Broken Access Control).`);
     }
     async detectFramework() {
         if (!this.browser)

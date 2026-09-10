@@ -645,6 +645,10 @@ Após \`Observation\`, formule o próximo \`Thought\`.`;
  * Esta mensagem inicia o loop ReAct.
  */
 function buildInitialUserMessage(appMap) {
+    // Sessao pode ser por JWT/Bearer OU por cookie (SSO/OAuth com token
+    // opaco ou httpOnly). Sem esse sinal, alvos cookie-based apareciam
+    // como "sem auth" e o LLM os tratava como app publico anonimo.
+    const cookieNames = Object.keys(appMap.auth.cookies ?? {});
     const summary = {
         baseUrl: appMap.baseUrl,
         framework: appMap.metadata.framework,
@@ -661,11 +665,28 @@ function buildInitialUserMessage(appMap) {
             authRequired: ep.authRequired,
         })),
         autenticacao: {
+            sessaoAutenticada: !!appMap.auth.jwt || cookieNames.length > 0,
+            tipo: appMap.auth.jwt ? 'bearer-jwt' : cookieNames.length > 0 ? 'cookie' : 'nenhuma',
             jwtDisponivel: !!appMap.auth.jwt,
             jwtToken: appMap.auth.jwt ? `${appMap.auth.jwt.substring(0, 50)}...` : null,
+            cookiesDisponiveis: cookieNames.length,
+            cookieNames, // apenas nomes; valores nunca vao ao prompt
             email: appMap.auth.userEmail,
         },
     };
+    // Bloco de credencial: JWT (Juice Shop e afins) mantem o texto
+    // original; sessao por cookie ganha instrucao explicita para o LLM
+    // NAO tratar o alvo como publico.
+    const credencialBlurb = appMap.auth.jwt
+        ? `**Token JWT completo (usuário comum autenticado via login válido) para uso em requisições:**\n\`${appMap.auth.jwt}\``
+        : cookieNames.length > 0
+            ? `**Sessão autenticada via COOKIE (não há Bearer/JWT neste alvo).** A sessão de ${cookieNames.length} ` +
+                `cookie(s) já foi injetada no browser (ações \`navigate\`/\`click_element\` saem autenticadas) e no ` +
+                `header \`Cookie\` do HttpClient (ações \`make_request\` saem autenticadas). **NÃO trate o alvo como ` +
+                `público/anônimo** — teste a superfície AUTENTICADA: IDOR/BOLA em recursos com id na URL, escalada ` +
+                `de privilégio, acesso a dados de outros tenants/usuários, e falta de CSRF token (auth por cookie ` +
+                `sem CSRF é candidato crítico). Cookies presentes: ${cookieNames.join(', ')}.`
+            : `**Nenhuma sessão autenticada foi fornecida** — o alvo será testado como anônimo.`;
     return `## APPMAP DO ALVO
 
 A fase de Percepção produziu o mapa a seguir. Todo conhecimento sobre o alvo vem daqui e das Observations \
@@ -675,8 +696,7 @@ subsequentes.
 ${JSON.stringify(summary, null, 2)}
 \`\`\`
 
-**Token JWT completo (usuário comum autenticado via login válido) para uso em requisições:**
-\`${appMap.auth.jwt ?? 'não disponível'}\`
+${credencialBlurb}
 
 Nas primeiras 3-5 iterações, faça reconhecimento ativo (§1): baixe bundle JS principal se listado, tente \
 \`/robots.txt\`, \`/sitemap.xml\`, \`/.well-known/\`, faça fingerprint de servidor por headers, procure documentação \

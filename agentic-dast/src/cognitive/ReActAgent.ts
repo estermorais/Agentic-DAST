@@ -281,23 +281,29 @@ export class ReActAgent {
           .replace(/```json\n?/g, '')
           .replace(/```\n?/g, '');
 
-        // Escalada em 3 niveis. Antes o parser tentava JSON.parse do
+        // Escalada em niveis. Antes o parser tentava JSON.parse do
         // texto inteiro e caia em cascata; agora fazemos brace-matching
         // deterministico primeiro, o que resolve o caso mais comum de
         // falha (finish com summary multi-linha contendo aspas nao
         // escapadas ou o LLM continuar escrevendo depois do JSON).
+        //
+        // parseJsonObjectLenient ainda tenta uma sanitizacao de control
+        // chars crus (quebras de linha/tabs literais dentro de strings),
+        // padrao frequente do Haiku em summary multi-linha com bullets —
+        // que faz o JSON.parse estrito lancar "Bad control character in
+        // string literal".
         const extracted = extractFirstJsonObject(jsonText);
-        if (extracted !== null) {
-          try {
-            actionInput = JSON.parse(extracted);
-          } catch {
-            // Ultima tentativa: parse do texto completo. Se falhar
-            // aqui, o parser retorna null e o loop pede reformatacao.
-            actionInput = JSON.parse(jsonText);
-          }
-        } else {
-          actionInput = JSON.parse(jsonText);
+        const parsed =
+          (extracted !== null ? parseJsonObjectLenient(extracted) : null) ??
+          parseJsonObjectLenient(jsonText);
+
+        if (parsed === null) {
+          // Falhou mesmo apos sanitizacao: retorna null e o loop pede
+          // reformatacao ao LLM.
+          console.warn('[Cognitivo] Action Input não é JSON válido mesmo após sanitização.');
+          return null;
         }
+        actionInput = parsed;
       }
 
       return {
@@ -344,6 +350,68 @@ function extractFirstJsonObject(text: string): string | null {
     }
   }
   return null; // objeto nao fechado (LLM truncou)
+}
+
+/**
+ * Tenta interpretar um trecho como objeto JSON, primeiro estrito e,
+ * se falhar, apos escapar control chars crus (quebras de linha, tabs,
+ * etc.) que aparecam DENTRO de strings. O Haiku costuma emitir
+ * summary multi-linha com bullets literais, o que JSON.parse estrito
+ * rejeita com "Bad control character in string literal". Retorna null
+ * quando nenhum dos dois caminhos produz um objeto.
+ */
+function parseJsonObjectLenient(text: string): Record<string, unknown> | null {
+  for (const candidate of [text, escapeControlCharsInStrings(text)]) {
+    try {
+      const value = JSON.parse(candidate);
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return value as Record<string, unknown>;
+      }
+    } catch {
+      /* tenta o proximo candidato */
+    }
+  }
+  return null;
+}
+
+/**
+ * Escapa control chars crus (U+0000–U+001F) que estejam DENTRO de
+ * strings JSON, deixando intactos os que estao fora (a indentacao de
+ * um JSON pretty-printed, por exemplo). Preserva escapes ja existentes.
+ * Nao altera JSON valido: sem control chars crus em string, a saida e
+ * identica a entrada.
+ */
+function escapeControlCharsInStrings(json: string): string {
+  let out = '';
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+
+    if (escape) { out += ch; escape = false; continue; }
+    if (ch === '\\') { out += ch; escape = true; continue; }
+    if (ch === '"') { inString = !inString; out += ch; continue; }
+
+    if (inString) {
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) {
+        switch (ch) {
+          case '\n': out += '\\n'; break;
+          case '\r': out += '\\r'; break;
+          case '\t': out += '\\t'; break;
+          case '\b': out += '\\b'; break;
+          case '\f': out += '\\f'; break;
+          default:   out += '\\u' + code.toString(16).padStart(4, '0');
+        }
+        continue;
+      }
+    }
+
+    out += ch;
+  }
+
+  return out;
 }
 
 /**

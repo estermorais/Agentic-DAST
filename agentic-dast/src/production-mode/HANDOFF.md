@@ -204,6 +204,23 @@ compartilhado como despesa de projeto de segurança.
 > também descobre as rotas por **crawl real** do alvo, em vez da lista
 > fixa de rotas do Juice Shop.
 
+> **Sessão por cookie (SSO/OAuth sem JWT):** alvos que autenticam por
+> cookie (token opaco/httpOnly, sem Bearer no storage) agora são
+> reconhecidos como **autenticados** pelo agente — o prompt sinaliza a
+> sessão por cookie e instrui o LLM a testar a superfície autenticada, em
+> vez de tratar o alvo como público. Antes, sem JWT, o agente concluía
+> "sem auth" e só fazia recon genérico.
+
+> **Re-sondagem de `authRequired` (SKIP_AUTH_PROBE):** como o crawl da
+> Fase 1 roda autenticado, todo endpoint volta 200 e apareceria como
+> `authRequired:false` (enganoso — só significa "minha sessão teve 200").
+> Por isso a Fase 1 re-sonda cada endpoint **GET sem sessão** para inferir
+> o `authRequired` real e revelar endpoints genuinamente públicos
+> (candidatos a Broken Access Control). É GET-only, mesmo domínio do alvo,
+> respeita `scope.excludePaths` e tem rate limit; não usa nem afeta a
+> sessão autenticada. Para pular (menos tráfego anônimo no alvo):
+> `SKIP_AUTH_PROBE=true`.
+
 Em qualquer alvo real com MFA ou SSO, login automatizado **não funciona**
 — Puppeteer não consegue passar o segundo fator sozinho.
 

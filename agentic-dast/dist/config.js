@@ -134,5 +134,13 @@ exports.config = {
     // apenas se o objetivo do teste for exatamente exercitar o logout
     // (ex.: session fixation, verificar invalidacao de token).
     allowLogoutNavigation: optional('ALLOW_LOGOUT_NAV', 'false').toLowerCase() === 'true',
+    // SKIP_AUTH_PROBE: por padrao (false) a Fase 1 de producao re-sonda
+    // cada endpoint GET SEM sessao, para inferir o authRequired REAL. Sem
+    // isso, como o crawl roda autenticado, todo endpoint retorna 200 e
+    // aparece como authRequired:false (enganoso — parece publico, mas so
+    // significa "minha sessao teve 200"). Defina 'true' para pular a
+    // re-sondagem (menos trafego anonimo no alvo, mas authRequired volta
+    // a ser so o derivado do crawl autenticado).
+    skipAuthProbe: optional('SKIP_AUTH_PROBE', 'false').toLowerCase() === 'true',
 };
 //# sourceMappingURL=config.js.map
