@@ -453,6 +453,19 @@ Saída: `targets/meu-alvo.json` com as rotas e endpoints encontrados
 > A extração é **heurística** (regex sobre o fonte) — é um ponto de
 > partida para revisar, não uma fonte final.
 
+> **Sem o código-fonte?** O caminho do repo é **opcional**. Omitindo-o,
+> o gerador escreve um **esqueleto** (`routes`/`endpoints` vazios + um
+> bloco `_exemplo` com o formato de cada campo) para você preencher à mão
+> a partir de docs de API, coleção Postman ou tráfego observado no
+> DevTools:
+>
+> ```bash
+> npm run gen:profile -- "" targets/meu-alvo.json meu-alvo
+> ```
+>
+> Enquanto `routes`/`endpoints` ficarem vazios, a rodada se comporta como
+> se não houvesse perfil (só o crawl). Remova `_exemplo` antes de usar.
+
 ### Passo 2 — revisar o JSON
 
 Abra o arquivo e ajuste principalmente:

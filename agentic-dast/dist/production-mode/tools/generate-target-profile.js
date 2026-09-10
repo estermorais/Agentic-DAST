@@ -10,11 +10,17 @@
  *
  * Uso:
  *   node dist/production-mode/tools/generate-target-profile.js \
- *        <caminho-do-repo-alvo> [saida.json] [nome]
+ *        [caminho-do-repo-alvo] [saida.json] [nome]
  *
  *   # ou via env:
  *   TARGET_REPO=/path/alvo TARGET_PROFILE_OUT=targets/alvo.json \
  *     node dist/production-mode/tools/generate-target-profile.js
+ *
+ * O caminho do repo e OPCIONAL. Sem ele, o script emite um ESQUELETO
+ * de perfil (routes/endpoints vazios + bloco _exemplo com o formato)
+ * para o red team preencher a mao quando nao tem o codigo-fonte do
+ * alvo — util para montar a superficie a partir de docs de API,
+ * colecao Postman ou trafego observado.
  *
  * IMPORTANTE: a extracao e heuristica (regex sobre o fonte). O
  * resultado e um PONTO DE PARTIDA — revise authRequired, params,
@@ -367,14 +373,69 @@ function extractRails(c) {
 // ===============================================================
 // Main
 // ===============================================================
+/**
+ * Escreve um esqueleto de perfil para preenchimento manual, usado
+ * quando NENHUM repositorio e informado (o red team nem sempre tem o
+ * codigo-fonte do alvo). routes/endpoints ficam vazios — enquanto
+ * assim, a rodada se comporta como sem perfil (so o crawl) — e um
+ * bloco _exemplo mostra o formato completo de cada campo a preencher.
+ */
+function writeScaffold(outPath, name) {
+    const scaffold = {
+        name,
+        // baseUrl / apiBaseUrl: raiz do app e base para endpoints relativos.
+        baseUrl: '',
+        apiBaseUrl: '',
+        framework: '',
+        scope: {
+            // Globs simples com '*' — paths que o agente NUNCA deve tocar.
+            excludePaths: ['*/logout', '*/signout'],
+        },
+        // Preencha estes dois arrays (veja _exemplo abaixo).
+        routes: [],
+        endpoints: [],
+        notes: 'ESQUELETO VAZIO — nenhum repositorio informado. Preencha routes e ' +
+            'endpoints manualmente (docs de API, colecao Postman, ou trafego ' +
+            'observado no DevTools). O bloco _exemplo mostra o formato de cada ' +
+            'campo; o schema completo esta em TargetProfile.ts. Enquanto routes/' +
+            'endpoints estiverem vazios, a rodada se comporta como sem perfil ' +
+            '(so o crawl). Remova _exemplo antes de usar.',
+        _exemplo: {
+            routes: [
+                { path: '#/admin', title: 'Painel admin', requiresAuth: true, roles: ['admin'] },
+            ],
+            endpoints: [
+                {
+                    method: 'GET',
+                    path: '/api/v2/users/{id}',
+                    authRequired: true,
+                    idor: true,
+                    roles: ['admin'],
+                    params: [{ name: 'id', in: 'path', type: 'string', example: '123' }],
+                    notes: 'Recurso com id direto na URL — candidato a IDOR/BOLA.',
+                },
+            ],
+        },
+        _generatedBy: `generate-target-profile (scaffold, sem repo) @ ${new Date().toISOString()}`,
+    };
+    const outDir = path.dirname(outPath);
+    if (outDir && !fs.existsSync(outDir))
+        fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(outPath, JSON.stringify(scaffold, null, 2), 'utf-8');
+    console.log(`[gen] Nenhum repositorio informado — esqueleto escrito em ${outPath}\n` +
+        `      Preencha routes/endpoints manualmente (veja _exemplo no arquivo) ` +
+        `e remova _exemplo.\n` +
+        `      Depois rode com TARGET_PROFILE=${outPath}.`);
+}
 function main() {
     const repo = process.argv[2] ?? process.env.TARGET_REPO ?? '';
     const outPath = process.argv[3] ?? process.env.TARGET_PROFILE_OUT ?? 'targets/generated-profile.json';
     const name = process.argv[4] ?? path.basename(repo || 'alvo');
+    // Repo e OPCIONAL: sem ele, emite um esqueleto para preenchimento
+    // manual em vez de abortar.
     if (!repo) {
-        console.error('Uso: node generate-target-profile.js <caminho-do-repo-alvo> [saida.json] [nome]\n' +
-            '     (ou defina TARGET_REPO / TARGET_PROFILE_OUT)');
-        process.exit(1);
+        writeScaffold(outPath, name);
+        return;
     }
     if (!fs.existsSync(repo)) {
         console.error(`Caminho do repo nao existe: ${repo}`);
