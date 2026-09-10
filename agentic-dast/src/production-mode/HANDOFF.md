@@ -163,6 +163,20 @@ Trade-offs em relação ao OpenRouter/Anthropic:
 - **Prompt caching Anthropic-style não funciona** por este canal, o que
   em rodadas longas pode consumir mais quota do Pro do que o esperado.
 - **Cada invocação aparece nos logs de uso** da conta Pro.
+- **Modelos capazes podem "quebrar o personagem".** `claude-cli` invoca o
+  **Claude Code completo** como backend (não um endpoint de completion
+  cru). Um modelo forte (ex.: Sonnet) pode reconhecer que roda dentro do
+  próprio Claude Code e **recusar** o formato ReAct, dizendo que "não tem
+  make_request/navigate". Para mitigar, o backend agora roda **endurecido
+  por padrão** (`CLAUDE_CLI_HARDEN=true`): o prompt de pentest é injetado
+  como *system* real via `--append-system-prompt`, com um role-lock que
+  proíbe meta-comentários e fixa o formato de saída. Se ainda assim o
+  modelo se recusar, você pode desligar as ferramentas do Claude Code (se
+  a sua versão do CLI suportar) com, por exemplo,
+  `CLAUDE_CLI_EXTRA_ARGS="--disallowedTools Bash,Edit,Write,Read"`, ou —
+  mais robusto — usar a **API direta** (`LLM_PROVIDER=anthropic`), que tem
+  o mesmo fluxo de dados (Anthropic/EUA) sem o meta-contexto do Claude
+  Code. Com Haiku o problema não aparece (ele apenas segue o formato).
 
 > ⚠️ **Aviso científico**: para que rodadas do red team possam alimentar
 > o estudo de generalização do artigo, o `LLM_MODEL` **deve ser

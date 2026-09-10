@@ -125,4 +125,22 @@ export const config = {
   // a ser so o derivado do crawl autenticado).
   skipAuthProbe:
     optional('SKIP_AUTH_PROBE', 'false').toLowerCase() === 'true',
+
+  // ── Backend claude-cli (LLM_PROVIDER=claude-cli) ───────────
+  // CLAUDE_CLI_HARDEN: por padrao (true) o prompt de pentest e
+  // injetado como system REAL via --append-system-prompt, com um
+  // role-lock que impede o Claude Code de "quebrar o personagem" —
+  // reconhecer que roda dentro do proprio Claude Code e recusar o
+  // formato ReAct (observado com modelos mais capazes, ex.: Sonnet).
+  // 'false' volta ao modo antigo (system concatenado no stdin).
+  claudeCliHarden:
+    optional('CLAUDE_CLI_HARDEN', 'true').toLowerCase() !== 'false',
+  // CLAUDE_CLI_EXTRA_ARGS: args crus extras repassados ao binario
+  // 'claude' (separados por espaco). Ex.: para desligar as tools do
+  // Claude Code (reduz ainda mais a quebra de personagem) se a sua
+  // versao do CLI suportar:
+  //   CLAUDE_CLI_EXTRA_ARGS="--disallowedTools Bash,Edit,Write,Read"
+  // Vazio = nenhum arg extra. Nao passe flags que a sua versao nao
+  // reconheca — o CLI aborta a rodada.
+  claudeCliExtraArgs: optional('CLAUDE_CLI_EXTRA_ARGS', ''),
 } as const;
