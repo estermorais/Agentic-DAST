@@ -66,6 +66,44 @@ export interface AuthContext {
   userId?: number;
 }
 
+/** Snapshot de storage de uma origem (localStorage + sessionStorage). */
+export interface StorageSnapshot {
+  origin: string;
+  local: Record<string, string>;
+  session: Record<string, string>;
+}
+
+/**
+ * Cookie no formato aceito pelo CDP (Network.setCookies). Estrutural
+ * — compativel com Protocol.Network.CookieParam do Puppeteer — para
+ * nao acoplar este modulo de tipos ao Puppeteer.
+ */
+export interface CdpCookieParam {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  url?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  expires?: number;
+  sameSite?: 'Strict' | 'Lax' | 'None';
+}
+
+/**
+ * Sessao de browser capturada na Percepcao, empacotada para handoff
+ * ao browser do Executor (BrowseTheWeb). Diferente do AuthContext,
+ * que so carrega token/cookies para os headers do HttpClient, esta
+ * carrega a sessao COMPLETA do browser: cookies de todos os dominios
+ * + localStorage/sessionStorage. Sem isso, navegacoes do Actor em
+ * SPAs OAuth/SSO (token em storage) caem de volta no login.
+ */
+export interface BrowserSession {
+  cookies: CdpCookieParam[];
+  storage: StorageSnapshot;
+  finalUrl: string;
+}
+
 /**
  * AppMap — artefato central do módulo de Percepção.
  * É o "modelo mental" da aplicação que será passado ao LLM.

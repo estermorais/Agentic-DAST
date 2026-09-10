@@ -43,6 +43,8 @@ import {
   FormField,
   InteractiveElement,
   AuthContext,
+  StorageSnapshot,
+  BrowserSession,
 } from '../perception/types';
 import {
   TargetProfile,
@@ -52,13 +54,6 @@ import {
   resolveEndpointUrl,
   matchesGlob,
 } from './TargetProfile';
-
-/** Snapshot de storage de uma origem (localStorage + sessionStorage). */
-interface StorageSnapshot {
-  origin: string;
-  local: Record<string, string>;
-  session: Record<string, string>;
-}
 
 /** Sessao capturada apos o login manual. */
 interface CapturedSession {
@@ -152,6 +147,8 @@ export class ProductionPerception {
   // ---------------------------------------------------------------
 
   private lastCapturedCookies: Protocol.Network.Cookie[] = [];
+  private lastStorage: StorageSnapshot | null = null;
+  private lastFinalUrl = '';
   private lastTitle = '';
 
   private async acquireSession(): Promise<AuthContext> {
@@ -251,6 +248,8 @@ export class ProductionPerception {
     console.log('');
 
     this.lastCapturedCookies = cookies;
+    this.lastStorage = storage;
+    this.lastFinalUrl = finalUrl;
     return { cookies, storage, finalUrl };
   }
 
@@ -339,6 +338,37 @@ export class ProductionPerception {
     } finally {
       await page.close();
     }
+  }
+
+  /**
+   * Empacota a sessao capturada (cookies de todos os dominios +
+   * localStorage/sessionStorage) para handoff ao browser do Executor.
+   * Deve ser chamado apos extract(). Retorna null quando nao ha
+   * sessao a propagar (rodada anonima).
+   *
+   * Diferente do AppMap.auth (que so alimenta os headers do
+   * HttpClient), esta sessao restaura o estado de browser necessario
+   * para que as acoes `navigate` do agente permanecam autenticadas
+   * em SPAs OAuth/SSO — cujo token vive em storage, nao em header.
+   */
+  getBrowserSession(): BrowserSession | null {
+    const cookies = this.lastCapturedCookies
+      .map(toCookieParam)
+      .filter((c): c is Protocol.Network.CookieParam => c !== null);
+
+    const storage: StorageSnapshot =
+      this.lastStorage ?? { origin: '', local: {}, session: {} };
+    const hasStorage =
+      Object.keys(storage.local).length > 0 ||
+      Object.keys(storage.session).length > 0;
+
+    if (cookies.length === 0 && !hasStorage) return null;
+
+    return {
+      cookies,
+      storage,
+      finalUrl: this.lastFinalUrl || this.targetUrl,
+    };
   }
 
   // ---------------------------------------------------------------

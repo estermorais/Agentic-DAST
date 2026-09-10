@@ -124,6 +124,20 @@ async function main() {
         console.log('[ FASE 2 ] Executor — iniciando Actor com camada de guardas...\n');
         dispatcher = await ActionDispatcher_1.ActionDispatcher.create();
         dispatcher.applyAuthContext(appMap.auth);
+        // Handoff da sessao de browser (cookies + localStorage/sessionStorage)
+        // para o browser do Actor. Sem isso, as acoes `navigate` do ReActAgent
+        // sobem num browser limpo e sao redirecionadas de volta ao login em
+        // alvos OAuth/SSO — mesmo com o AppMap.auth preenchido.
+        const browserSession = extractor.getBrowserSession();
+        if (browserSession) {
+            await dispatcher.applyBrowserSession(browserSession);
+            console.log('[Executor] Sessao de browser propagada ao Actor.\n');
+        }
+        else {
+            console.warn('[Executor] Nenhuma sessao de browser capturada para o handoff — ' +
+                'as navegacoes do agente podem cair no login. Use INTERACTIVE_LOGIN ' +
+                'ou MANUAL_COOKIES para autenticar.\n');
+        }
         safeDispatcher = new SafeDispatcher_1.SafeDispatcher(dispatcher, {
             readOnly,
             interactive,

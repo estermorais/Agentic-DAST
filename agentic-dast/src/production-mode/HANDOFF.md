@@ -230,7 +230,14 @@ Em qualquer dos três, o framework:
   produção)
 - Injeta a sessão no Puppeteer antes da Fase 1 (Percepção autenticada)
 - Injeta JWT e Cookie como headers default no HttpClient (todas as
-  requests do agente saem já autenticadas)
+  requests `make_request` do agente saem já autenticadas)
+- **Propaga a sessão completa** (cookies de todos os domínios +
+  `localStorage`/`sessionStorage`) para o **browser do agente** na Fase 2,
+  antes do loop ReAct. Sem esse handoff, o browser do agente subia limpo e
+  as ações `navigate` caíam de volta no login em SPAs OAuth/SSO (onde o
+  token vive no storage, não em header). Se nenhuma sessão foi capturada, o
+  runner emite um aviso `Nenhuma sessao de browser capturada para o
+  handoff` — sinal de que você rodou sem `INTERACTIVE_LOGIN`/`MANUAL_*`.
 
 ### Opção 1 — Login interativo (recomendado)
 
@@ -334,6 +341,29 @@ as duas.
 ```env
 MANUAL_JWT=eyJhbGciOi...
 MANUAL_COOKIES=XSRF-TOKEN=def456; tenant=acme
+```
+
+### Proteção automática contra logout
+
+Uma vez autenticado, o agente **não pode deslogar sozinho**. O browser do
+agente recusa qualquer `navigate` ou `click_element` que aponte para uma
+página de logout/signout/sair (path, hash `#/logout`, endpoints de SSO como
+`/v2/logout` do Auth0 ou `end-session` do OIDC, e rótulos como "Sair" /
+"Logout" / "Encerrar sessão"). Isso evita que o agente destrua no meio da
+rodada a sessão que você levou um login manual + MFA para obter — sem ela,
+todas as ações seguintes cairiam no login.
+
+- É **ligado por padrão** e vale para todos os modos (não só produção).
+- Quando bloqueia, o agente recebe uma Observation explicando que a sessão
+  foi preservada e que ele deve continuar em rotas autenticadas.
+- Independe do `scope.excludePaths` do Target Profile (que continua útil,
+  mas atua só no crawl da Fase 1; este guard cobre o loop ReAct da Fase 3).
+
+**Para desligar** — apenas se o objetivo do teste for exatamente exercitar
+o logout (ex.: session fixation, verificar invalidação de token):
+
+```env
+ALLOW_LOGOUT_NAV=true
 ```
 
 ### Ressalvas importantes

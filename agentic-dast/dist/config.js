@@ -127,5 +127,12 @@ exports.config = {
     // ── Comportamento do agente ────────────────────────────────
     maxReactIterations: parseInt(optional('MAX_REACT_ITERATIONS', '25')),
     useZapProxy: _useZapProxy,
+    // ALLOW_LOGOUT_NAV: por padrao (false) o browser do Actor RECUSA
+    // navegar ou clicar para paginas de logout/signout/sair. Isso evita
+    // que o agente destrua a sessao autenticada (o alvo invalida o
+    // token/cookie e as proximas acoes caem no login). Defina 'true'
+    // apenas se o objetivo do teste for exatamente exercitar o logout
+    // (ex.: session fixation, verificar invalidacao de token).
+    allowLogoutNavigation: optional('ALLOW_LOGOUT_NAV', 'false').toLowerCase() === 'true',
 };
 //# sourceMappingURL=config.js.map

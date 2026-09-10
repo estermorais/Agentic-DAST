@@ -15,6 +15,7 @@
 import { Actor } from './screenplay/Actor';
 import { BrowseTheWeb } from './abilities/BrowseTheWeb';
 import { HttpClient } from './abilities/HttpClient';
+import { BrowserSession } from '../perception/types';
 
 // ===========================================================
 // Tipos exportados (consumidos pelo ReActAgent)
@@ -192,6 +193,19 @@ export class ActionDispatcher {
         .join('; ');
       http.setDefaultHeader('Cookie', cookieString);
     }
+  }
+
+  /**
+   * Faz o handoff da sessao de browser capturada na Percepcao para o
+   * browser do Actor (cookies + localStorage/sessionStorage). Sem
+   * isso, applyAuthContext cobre apenas os make_request (headers do
+   * HttpClient) e as acoes `navigate` do agente caem no login.
+   *
+   * Deve ser chamado uma vez, logo apos applyAuthContext.
+   */
+  async applyBrowserSession(session: BrowserSession): Promise<void> {
+    const browser = this.actor.getBrowseTheWeb();
+    await browser.applySession(session);
   }
 
   /** Encerra o Actor (fecha o browser) */

@@ -125,6 +125,18 @@ class ActionDispatcher {
             http.setDefaultHeader('Cookie', cookieString);
         }
     }
+    /**
+     * Faz o handoff da sessao de browser capturada na Percepcao para o
+     * browser do Actor (cookies + localStorage/sessionStorage). Sem
+     * isso, applyAuthContext cobre apenas os make_request (headers do
+     * HttpClient) e as acoes `navigate` do agente caem no login.
+     *
+     * Deve ser chamado uma vez, logo apos applyAuthContext.
+     */
+    async applyBrowserSession(session) {
+        const browser = this.actor.getBrowseTheWeb();
+        await browser.applySession(session);
+    }
     /** Encerra o Actor (fecha o browser) */
     async teardown() {
         await this.actor.teardown();
