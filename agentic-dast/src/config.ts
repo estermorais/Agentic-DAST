@@ -57,6 +57,15 @@ export const config = {
   // ── Ollama (LLM local) ─────────────────────────────────────
   ollamaUrl:   optional('OLLAMA_URL',   'http://localhost:11434'),
   ollamaModel: optional('OLLAMA_MODEL', 'qwen2.5:7b'),
+  // Temperatura baixa por padrao: o loop ReAct exige JSON estrito e
+  // disciplina anti-alucinacao. 1.0 (o default antigo) gerava erro de
+  // formato e findings inventados; ~0.2 estabiliza o comportamento.
+  ollamaTemperature: parseFloat(optional('OLLAMA_TEMPERATURE', '0.2')),
+  // Janela de contexto do Ollama. 16384 acomoda o prompt (~10-12k) +
+  // historico em maquinas modestas; suba para 32768 quando tiver RAM
+  // (ex.: 32 GB rodando um 32B) para evitar truncar o historico no meio
+  // do loop. O KV-cache cresce linearmente com este valor.
+  ollamaNumCtx: parseInt(optional('OLLAMA_NUM_CTX', '16384'), 10),
 
   // ── Autenticacao manual (para alvos com MFA ou SSO) ────────
   // Se qualquer uma destas variaveis estiver preenchida, o

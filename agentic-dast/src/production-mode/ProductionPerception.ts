@@ -124,19 +124,26 @@ export class ProductionPerception {
     // publicos = candidatos a Broken Access Control).
     await this.probeAuthRequirement(apiEndpoints);
 
+    // Prioriza o que importa: o prompt do nucleo mostra so os primeiros
+    // ~40 endpoints, entao superficie do alvo + candidatos a IDOR/auth
+    // vem primeiro e hosts de terceiros (analytics, CDN) por ultimo.
+    // Ajuda modelos locais mais fracos a focar em vez de gastar o
+    // orcamento em ruido.
+    const prioritizedEndpoints = this.prioritizeEndpoints(apiEndpoints);
+
     const framework = this.profile?.framework ?? (await this.detectFramework());
 
     const appMap: AppMap = {
       baseUrl: this.targetUrl,
       routes,
-      apiEndpoints,
+      apiEndpoints: prioritizedEndpoints,
       auth,
       metadata: {
         framework,
         title: this.lastTitle || this.targetHost,
         capturedAt: new Date(),
         totalForms: routes.reduce((sum, r) => sum + r.forms.length, 0),
-        totalEndpoints: apiEndpoints.length,
+        totalEndpoints: prioritizedEndpoints.length,
       },
     };
 
@@ -819,6 +826,40 @@ export class ProductionPerception {
       `[Percepção/prod] Re-sondagem concluida: ${publicos} endpoint(s) respondem ` +
       `JSON SEM auth (candidatos a Broken Access Control).`,
     );
+  }
+
+  /**
+   * Ordena os endpoints por relevancia para o teste, de forma estavel
+   * (empates preservam a ordem original: perfil antes de crawl). Como o
+   * prompt do nucleo corta nos primeiros ~40, isto garante que os mais
+   * interessantes cheguem ao LLM: superficie do proprio alvo (nao
+   * terceiros), candidatos a IDOR/BOLA e superficie autenticada.
+   */
+  private prioritizeEndpoints(endpoints: ApiEndpoint[]): ApiEndpoint[] {
+    const targetParent = this.targetHost.split('.').slice(1).join('.');
+    const sameSite = (host: string): boolean =>
+      !!host &&
+      (host === this.targetHost ||
+        host === targetParent ||
+        (targetParent.length > 0 && host.endsWith(`.${targetParent}`)));
+
+    const score = (e: ApiEndpoint): number => {
+      let s = 0;
+      // Superficie do alvo pesa muito mais que hosts de terceiros
+      // (pendo, facebook, google, CDNs que entram via CSP/analytics).
+      if (sameSite(safeHost(e.url))) s += 100;
+      // Candidato a IDOR/BOLA marcado no perfil.
+      const rb = e.responseBody as { idor?: boolean } | undefined;
+      if (rb && rb.idor === true) s += 20;
+      // Id direto na URL (numero longo ou UUID/hash) — candidato a IDOR.
+      if (/\/\d{2,}(?:[/?#]|$)|\/[0-9a-f-]{16,}/i.test(e.url)) s += 8;
+      // Superficie autenticada e o alvo principal do teste.
+      if (e.authRequired) s += 5;
+      return s;
+    };
+
+    // Sort estavel (V8): empates mantem a ordem de insercao.
+    return [...endpoints].sort((a, b) => score(b) - score(a));
   }
 
   private async detectFramework(): Promise<string> {

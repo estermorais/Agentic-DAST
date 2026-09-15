@@ -208,12 +208,14 @@ class OllamaClient {
                     ...history,
                 ],
                 options: {
-                    // Janela de contexto: 16K — balanço entre acomodar AppMap +
-                    // histórico do loop ReAct (~10-12K) e não estourar RAM em
-                    // máquinas com 8 GB. Qwen 2.5 e Llama 3.2 suportam até 128K
-                    // mas o KV-cache cresce linearmente com num_ctx.
-                    num_ctx: 16384,
-                    temperature: 1.0,
+                    // Janela de contexto e temperatura vêm do config (env
+                    // OLLAMA_NUM_CTX / OLLAMA_TEMPERATURE). num_ctx equilibra
+                    // acomodar AppMap + histórico do loop ReAct (~10-12K) e não
+                    // estourar RAM; suba com mais RAM. temperatura baixa (~0.2)
+                    // é essencial para o loop ReAct: reduz erro de formato JSON
+                    // e alucinação de findings — os modos de falha observados.
+                    num_ctx: config_1.config.ollamaNumCtx,
+                    temperature: config_1.config.ollamaTemperature,
                 },
             }, {
                 // 10 minutos: a 1ª chamada inclui carga do modelo na RAM (~30-90s

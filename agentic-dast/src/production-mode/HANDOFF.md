@@ -191,12 +191,30 @@ Trade-offs em relação ao OpenRouter/Anthropic:
 **Ollama local (nada sai da máquina):**
 ```env
 LLM_PROVIDER=ollama
-OLLAMA_MODEL=qwen2.5:14b
-OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:32b        # maior modelo que roda com RAM decente
+OLLAMA_URL=http://localhost:11434
+OLLAMA_TEMPERATURE=0.2          # baixa = JSON estável, menos alucinação
+OLLAMA_NUM_CTX=32768            # suba com RAM; 16384 em máquinas modestas
 ```
 
-Requer Ollama instalado localmente (`ollama pull qwen2.5:14b`) e uma
-GPU decente (RTX 3060+) para performance razoável.
+> **Atenção:** a variável correta é `OLLAMA_URL` (o código lê essa, não
+> `OLLAMA_HOST`).
+
+Requer Ollama instalado localmente (`ollama pull qwen2.5:32b`).
+
+**Dimensionamento do modelo (Ollama é CPU-only sem GPU NVIDIA):**
+
+| RAM | Maior modelo viável (Q4) | Qualidade |
+|---|---|---|
+| ~16 GB | 7B | fraco (pior que Haiku) |
+| **32 GB** | **Qwen2.5 32B** | bom — ponto-doce |
+| 64 GB | 70B/72B | melhor (teto CPU-only) |
+
+Sem GPU, a inferência é **lenta** (o *prefill* do prompt de ~10k tokens a
+cada iteração é o gargalo) — uma rodada completa pode levar horas. RAM
+sobe o teto de **qualidade** (modelo maior), não a **velocidade** (isso
+só uma GPU resolve). `OLLAMA_TEMPERATURE=0.2` e `OLLAMA_NUM_CTX` ajustável
+já vêm por padrão para estabilizar o formato e evitar truncar o histórico.
 
 ### Custo estimado para o red team
 
