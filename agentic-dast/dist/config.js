@@ -151,6 +151,14 @@ exports.config = {
     // re-sondagem (menos trafego anonimo no alvo, mas authRequired volta
     // a ser so o derivado do crawl autenticado).
     skipAuthProbe: optional('SKIP_AUTH_PROBE', 'false').toLowerCase() === 'true',
+    // ACTIVE_DISCOVERY: descoberta ativa na Fase 1 (opt-in, default off).
+    // Quando 'true', alem do crawl passivo, a percepcao (a) baixa os
+    // bundles JS da SPA e extrai caminhos de API por regex, e (b) sonda
+    // uma lista curada de caminhos comuns (swagger/openapi/graphql/etc.).
+    // Tudo GET-only, mesmo dominio, respeitando scope.excludePaths, com
+    // rate limit. Default off porque adiciona trafego ativo ao alvo —
+    // ligue deliberadamente quando quiser mapear mais superficie.
+    activeDiscovery: optional('ACTIVE_DISCOVERY', 'false').toLowerCase() === 'true',
     // ── Backend claude-cli (LLM_PROVIDER=claude-cli) ───────────
     // CLAUDE_CLI_HARDEN: por padrao (true) o prompt de pentest e
     // injetado como system REAL via --append-system-prompt, com um

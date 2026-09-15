@@ -65,6 +65,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductionPerception = void 0;
+exports.extractApiPathsFromJs = extractApiPathsFromJs;
 const puppeteer_1 = __importDefault(require("puppeteer"));
 const axios_1 = __importDefault(require("axios"));
 const readline = __importStar(require("readline"));
@@ -76,6 +77,8 @@ const NAV_TIMEOUT_MS = 20_000;
 class ProductionPerception {
     browser = null;
     interceptedEndpoints = [];
+    /** URLs de bundles JS vistos no crawl — fonte da descoberta ativa. */
+    discoveredScriptUrls = new Set();
     targetUrl = config_1.config.targetUrl;
     targetHost = safeHost(config_1.config.targetUrl);
     /** Perfil do alvo (TARGET_PROFILE), se fornecido. */
@@ -108,6 +111,9 @@ class ProductionPerception {
         //    autoritativa) e faz merge com o que o crawl observou.
         //    Perfil vem primeiro (verdade); crawl confirma e complementa.
         const routes = this.mergeRoutes(this.profileRoutes(), crawledRoutes);
+        // Descoberta ativa (opt-in): extrai endpoints dos bundles JS e sonda
+        // caminhos comuns, adicionando aos interceptados antes do dedupe.
+        await this.activeDiscovery();
         const apiEndpoints = this.dedupeEndpoints([
             ...this.profileEndpoints(),
             ...this.interceptedEndpoints,
@@ -593,6 +599,14 @@ class ProductionPerception {
             try {
                 const req = response.request();
                 const resType = req.resourceType();
+                // Guarda bundles JS para a descoberta ativa (extrai endpoints
+                // deles depois). So mesmo dominio e so .js.
+                if (resType === 'script') {
+                    const su = response.url();
+                    if (/\.js(\?|$)/i.test(su))
+                        this.discoveredScriptUrls.add(su.split('#')[0]);
+                    return;
+                }
                 // So interessa API (xhr/fetch), nao assets estaticos.
                 if (resType !== 'xhr' && resType !== 'fetch')
                     return;
@@ -748,6 +762,113 @@ class ProductionPerception {
         console.log(`[Percepção/prod] Re-sondagem concluida: ${publicos} endpoint(s) respondem ` +
             `JSON SEM auth (candidatos a Broken Access Control).`);
     }
+    /** Host pertence ao dominio registravel do alvo (nao terceiros). */
+    sameSiteHost(host) {
+        const parent = this.targetHost.split('.').slice(1).join('.');
+        return (!!host &&
+            (host === this.targetHost ||
+                host === parent ||
+                (parent.length > 0 && host.endsWith(`.${parent}`))));
+    }
+    /**
+     * Descoberta ativa (opt-in via ACTIVE_DISCOVERY). Complementa o crawl
+     * passivo mapeando superficie que a UI nao expoe: endpoints embutidos
+     * nos bundles JS da SPA e caminhos comuns de API/infra. Tudo GET-only,
+     * mesmo dominio, respeitando excludePaths, com rate limit. O que
+     * descobre entra em interceptedEndpoints e sera re-sondado por
+     * probeAuthRequirement e priorizado como o resto.
+     */
+    async activeDiscovery() {
+        if (!config_1.config.activeDiscovery)
+            return;
+        console.log('[Percepção/prod] Descoberta ativa habilitada (ACTIVE_DISCOVERY).');
+        await this.discoverFromJsBundles();
+        await this.probeCommonPaths();
+    }
+    /** Baixa os bundles JS vistos no crawl e extrai caminhos de API. */
+    async discoverFromJsBundles() {
+        const bundles = [...this.discoveredScriptUrls]
+            .filter((u) => this.sameSiteHost(safeHost(u)))
+            .slice(0, 12); // limita para nao baixar dezenas de chunks
+        if (bundles.length === 0)
+            return;
+        const discovered = new Map();
+        for (const bundleUrl of bundles) {
+            try {
+                const res = await axios_1.default.get(bundleUrl, {
+                    timeout: 15_000,
+                    maxContentLength: 8 * 1024 * 1024,
+                    responseType: 'text',
+                    validateStatus: () => true,
+                });
+                if (res.status >= 400 || typeof res.data !== 'string')
+                    continue;
+                for (const raw of extractApiPathsFromJs(res.data)) {
+                    let abs;
+                    try {
+                        abs = /^https?:\/\//i.test(raw) ? raw : new URL(raw, this.targetUrl).toString();
+                    }
+                    catch {
+                        continue;
+                    }
+                    if (!this.sameSiteHost(safeHost(abs)))
+                        continue;
+                    if (this.isExcludedByScope(abs))
+                        continue;
+                    const key = `GET ${stripQuery(abs)}`;
+                    if (!discovered.has(key)) {
+                        discovered.set(key, { method: 'GET', url: abs, authRequired: false });
+                    }
+                }
+            }
+            catch {
+                /* ignora bundle inacessivel */
+            }
+            await sleep(200);
+        }
+        const list = [...discovered.values()].slice(0, 60);
+        this.interceptedEndpoints.push(...list);
+        console.log(`[Percepção/prod] Bundles JS: ${list.length} endpoint(s) candidato(s) ` +
+            `extraido(s) de ${bundles.length} bundle(s).`);
+    }
+    /** Sonda uma lista curada de caminhos comuns de API/infra. */
+    async probeCommonPaths() {
+        let origin;
+        try {
+            origin = new URL(this.targetUrl).origin;
+        }
+        catch {
+            return;
+        }
+        const found = [];
+        for (const p of COMMON_DISCOVERY_PATHS) {
+            const url = `${origin}${p}`;
+            if (this.isExcludedByScope(url))
+                continue;
+            try {
+                const res = await axios_1.default.get(url, {
+                    timeout: 10_000,
+                    maxRedirects: 0,
+                    validateStatus: () => true,
+                    headers: { Accept: 'application/json, text/plain, */*' },
+                });
+                const ct = String(res.headers['content-type'] ?? '');
+                const protectedButExists = res.status === 401 || res.status === 403;
+                const realContent = res.status >= 200 && res.status < 300 && !ct.includes('text/html');
+                // 200 text/html tipicamente e o shell/catch-all da SPA — ignora.
+                if (protectedButExists || realContent) {
+                    found.push({ method: 'GET', url, authRequired: protectedButExists });
+                }
+            }
+            catch {
+                /* ignora caminho inacessivel */
+            }
+            await sleep(250);
+        }
+        this.interceptedEndpoints.push(...found);
+        console.log(`[Percepção/prod] Caminhos comuns: ${found.length} caminho(s) interessante(s) ` +
+            `(JSON/protegido, ignorando shell HTML).`);
+    }
     /**
      * Ordena os endpoints por relevancia para o teste, de forma estavel
      * (empates preservam a ordem original: perfil antes de crawl). Como o
@@ -873,6 +994,53 @@ function safeHost(url) {
     catch {
         return '';
     }
+}
+/**
+ * Caminhos comuns sondados na descoberta ativa (opt-in). Read-only:
+ * docs de API, schemas, health/metrics e arquivos sensiveis expostos
+ * por engano. GET apenas.
+ */
+const COMMON_DISCOVERY_PATHS = [
+    '/robots.txt',
+    '/sitemap.xml',
+    '/.well-known/security.txt',
+    '/swagger.json',
+    '/swagger/v1/swagger.json',
+    '/openapi.json',
+    '/api-docs',
+    '/v2/api-docs',
+    '/graphql',
+    '/api',
+    '/api/v1',
+    '/api/v2',
+    '/actuator',
+    '/actuator/health',
+    '/metrics',
+    '/health',
+    '/status',
+    '/.git/config',
+    '/.env',
+];
+/**
+ * Extrai caminhos de API embutidos no codigo JS de um bundle. Puramente
+ * heuristico (regex): pega literais entre aspas/backticks que parecam
+ * rota de API (/api, /v1, /graphql, ...) ou URLs absolutas. Conservador
+ * de proposito — o objetivo e semear candidatos, que serao re-sondados.
+ */
+function extractApiPathsFromJs(js) {
+    const found = new Set();
+    // Caminhos relativos com prefixo tipico de API. O segmento seguinte
+    // e opcional para pegar tambem raizes como "/graphql" e "/api". O
+    // delimitador de aspas evita casar prefixos parciais (ex.: /apiary).
+    const relRe = /["'`](\/(?:api|rest|graphql|internal|backend|services?|v\d+)(?:\/[A-Za-z0-9_\-./:]{1,120})?)["'`]/gi;
+    // URLs absolutas (filtradas por dominio depois, no chamador).
+    const absRe = /["'`](https?:\/\/[a-z0-9.-]+\/[A-Za-z0-9_\-./:]{1,120})["'`]/gi;
+    let m;
+    while ((m = relRe.exec(js)) !== null)
+        found.add(m[1]);
+    while ((m = absRe.exec(js)) !== null)
+        found.add(m[1]);
+    return [...found];
 }
 function stripQuery(url) {
     try {

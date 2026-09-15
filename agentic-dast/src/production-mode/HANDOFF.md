@@ -253,6 +253,19 @@ compartilhado como despesa de projeto de segurança.
 > sessão autenticada. Para pular (menos tráfego anônimo no alvo):
 > `SKIP_AUTH_PROBE=true`.
 
+> **Descoberta ativa (ACTIVE_DISCOVERY — opt-in, default OFF):** por
+> padrão a Fase 1 descobre a superfície só pelo **crawl passivo** (o que
+> a UI dispara). Com `ACTIVE_DISCOVERY=true`, ela também (a) **baixa os
+> bundles JS** da SPA e extrai caminhos de API embutidos por regex, e (b)
+> **sonda uma lista curada de caminhos comuns** (`/swagger.json`,
+> `/openapi.json`, `/graphql`, `/actuator`, `/.git/config`, etc.),
+> guardando os que respondem JSON ou 401/403 (ignora o shell HTML). Isso
+> mapeia superfície que a UI não expõe — útil quando não há Target
+> Profile. Tudo GET-only, mesmo domínio, respeita `scope.excludePaths`,
+> com rate limit. Vem **desligado** porque adiciona tráfego ativo ao
+> alvo; ligue deliberadamente. *(Ainda não validado contra alvo real —
+> na primeira vez, rode com o time acompanhando.)*
+
 Em qualquer alvo real com MFA ou SSO, login automatizado **não funciona**
 — Puppeteer não consegue passar o segundo fator sozinho.
 
