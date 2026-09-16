@@ -640,10 +640,112 @@ Action Input:
 Após \`Observation\`, formule o próximo \`Thought\`.`;
 
 /**
+ * Bloco de exemplos (few-shot) — OPCIONAL, anexado ao final do system
+ * prompt apenas quando ativado (produção: USE_FEWSHOT=true). Não faz
+ * parte do baseline do TCC (n=30), que roda sem exemplos.
+ *
+ * OBJETIVO: reduzir alucinação e firmar o formato ReAct DEMONSTRANDO
+ * dois comportamentos-alvo, em vez de só descrevê-los:
+ *   (1) achado LEGÍTIMO — hipótese → make_request → Observation com
+ *       evidência concreta → report_finding ancorado nessa evidência;
+ *   (2) sessão INCONCLUSIVA — honestidade: finish com "0 findings" em
+ *       vez de inventar achados.
+ *
+ * VALIDADE EXTERNA: os exemplos usam um alvo FICTÍCIO (\`shop.example\`)
+ * e são explicitamente marcados como ilustrativos. O modelo é instruído
+ * a NÃO reaproveitar estes endpoints/achados no alvo real — só o padrão
+ * de raciocínio. Isso evita (a) vazar respostas para os alvos avaliados
+ * e (b) alucinação por mímica (reportar a vuln do exemplo por reflexo).
+ */
+export const FEWSHOT_BLOCK = `
+
+# EXEMPLOS ILUSTRATIVOS (few-shot)
+
+Os dois exemplos abaixo são de um alvo FICTÍCIO (\`https://shop.example\`), \
+sem relação com o alvo real desta sessão. Servem só para demonstrar o PADRÃO \
+de raciocínio e o formato. **NÃO** presuma que estes endpoints, IDs ou \
+vulnerabilidades existem no alvo real — teste o alvo real do zero e reporte \
+apenas o que SUAS Observations demonstrarem.
+
+## Exemplo A — achado legítimo (IDOR ancorado em evidência)
+
+Thought: O AppMap lista GET /api/v1/orders/1043 (meu pedido) com id numérico. Hipótese: sem checagem de propriedade, consigo ler o pedido de outro usuário. Testo um id adjacente.
+Action: make_request
+Action Input:
+{"action":"make_request","method":"GET","url":"https://shop.example/api/v1/orders/1042","headers":{"Authorization":"Bearer <meu-jwt>"}}
+
+Observation: 200 OK. Body: {"orderId":1042,"userId":775,"email":"other.customer@shop.example","total":89.90,"items":[...]}
+
+Thought: Recebi 200 com dados de outro usuário (userId 775, e-mail de terceiro) usando MEU token. É IDOR de leitura confirmado por evidência concreta. Registro o finding com a resposta como evidência.
+Action: report_finding
+Action Input:
+{"action":"report_finding","title":"IDOR de leitura em /api/v1/orders/{id}","severity":"HIGH","category":"BROKEN_ACCESS_CONTROL","description":"Endpoint retorna pedido de outro usuário sem checar propriedade. CWE-639. CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N","steps":["Autenticar como usuário comum (pedido próprio 1043)","GET /api/v1/orders/1042 com o próprio token","Observar 200 com dados de userId 775"],"evidence":"HTTP 200 body: {\\"orderId\\":1042,\\"userId\\":775,\\"email\\":\\"other.customer@shop.example\\",...}"}
+
+Observation: Finding registrado (1 no total).
+
+Thought: Cobri Broken Access Control com evidência. Se fosse o fim da sessão, encerraria consolidando o que foi testado.
+Action: finish
+Action Input:
+{"action":"finish","summary":"1 finding HIGH confirmado: IDOR de leitura em /api/v1/orders/{id}, com resposta HTTP como evidência. Categorias tocadas: Broken Access Control. Ficou por testar: injection, XSS, JWT."}
+
+## Exemplo B — sessão inconclusiva (honestidade, sem inventar)
+
+Thought: O AppMap só expõe a tela de login; todos os endpoints de API retornam 401 sem sessão e não recebi credenciais válidas. Testo se algum endpoint responde sem auth.
+Action: make_request
+Action Input:
+{"action":"make_request","method":"GET","url":"https://shop.example/api/v1/profile","headers":{}}
+
+Observation: 401 Unauthorized. Body: {"error":"authentication required"}
+
+Thought: 401 é o comportamento esperado (proteção OK, não é achado). Sem credenciais válidas e sem superfície anônima, não há o que testar de forma confiável nesta sessão. NÃO vou inventar achados — encerro declarando a limitação com honestidade.
+Action: finish
+Action Input:
+{"action":"finish","summary":"0 findings. Sessão inconclusiva: alvo exige autenticação em toda a API (401 sem sessão) e nenhuma credencial válida foi fornecida; não houve superfície anônima testável. Recomenda-se rodar novamente com uma sessão autenticada (MANUAL_COOKIES/INTERACTIVE_LOGIN)."}
+
+---
+Fim dos exemplos ilustrativos. Volte ao alvo REAL desta sessão.`;
+
+/**
+ * Monta o system prompt. Sem opções (caso do TCC) retorna exatamente
+ * SYSTEM_PROMPT, byte-a-byte. Com \`fewShot\`, anexa FEWSHOT_BLOCK ao
+ * final (após o formato de resposta, para recência) — usado só no
+ * caminho de produção.
+ */
+export function buildSystemPrompt(opts?: { fewShot?: boolean }): string {
+  return opts?.fewShot ? SYSTEM_PROMPT + FEWSHOT_BLOCK : SYSTEM_PROMPT;
+}
+
+/**
+ * Opções de construção da mensagem inicial.
+ *
+ * IMPORTANTE — ISOLAMENTO DO TCC: quando `buildInitialUserMessage` é
+ * chamado SEM opts (caso do entrypoint oficial `src/index.ts`), o
+ * texto produzido é idêntico byte-a-byte ao histórico da rodada n=30
+ * do Juice Shop. As opções abaixo só têm efeito no caminho de
+ * produção, que as passa explicitamente.
+ */
+export interface InitialMessageOptions {
+  /**
+   * Quantos endpoints listar no resumo. Default 40 (comportamento do
+   * TCC). Em produção, com a superfície já priorizada por risco
+   * (ver SurfacePrioritizer), vale a pena elevar para o agente ver
+   * mais da app real.
+   */
+  maxEndpoints?: number;
+  /**
+   * Se true, anota que os endpoints listados foram priorizados por
+   * risco e informa quantos ficaram de fora do corte. Só faz sentido
+   * quando a lista chega já ordenada por risco.
+   */
+  prioritized?: boolean;
+}
+
+/**
  * Gera a mensagem inicial do usuário com o AppMap serializado.
  * Esta mensagem inicia o loop ReAct.
  */
-export function buildInitialUserMessage(appMap: AppMap): string {
+export function buildInitialUserMessage(appMap: AppMap, opts?: InitialMessageOptions): string {
+  const maxEndpoints = opts?.maxEndpoints ?? 40;
   // Sessao pode ser por JWT/Bearer OU por cookie (SSO/OAuth com token
   // opaco ou httpOnly). Sem esse sinal, alvos cookie-based apareciam
   // como "sem auth" e o LLM os tratava como app publico anonimo.
@@ -657,7 +759,7 @@ export function buildInitialUserMessage(appMap: AppMap): string {
       requiresAuth: r.requiresAuth,
       numFormularios: r.forms.length,
     })),
-    endpointsApi: appMap.apiEndpoints.slice(0, 40).map((ep) => ({
+    endpointsApi: appMap.apiEndpoints.slice(0, maxEndpoints).map((ep) => ({
       method: ep.method,
       url: ep.url,
       status: ep.responseStatus,
@@ -688,6 +790,20 @@ export function buildInitialUserMessage(appMap: AppMap): string {
         `sem CSRF é candidato crítico). Cookies presentes: ${cookieNames.join(', ')}.`
       : `**Nenhuma sessão autenticada foi fornecida** — o alvo será testado como anônimo.`;
 
+  // Nota de priorização — só aparece no caminho de produção (opts.prioritized)
+  // e apenas quando há mais endpoints do que couberam no corte. Sem opts a
+  // string é vazia e a mensagem fica idêntica à do TCC.
+  const totalEndpoints = appMap.apiEndpoints.length;
+  const hiddenEndpoints = totalEndpoints - maxEndpoints;
+  const prioritizationNote =
+    opts?.prioritized && hiddenEndpoints > 0
+      ? `> **Superfície priorizada por risco.** A aplicação-alvo expôs ${totalEndpoints} endpoints; ` +
+        `os ${maxEndpoints} listados acima são os de MAIOR probabilidade de vulnerabilidade ` +
+        `(métodos de escrita, sem auth, id na URL, rotas sensíveis, params de SSRF, docs de API). ` +
+        `Outros ${hiddenEndpoints} endpoints de menor prioridade foram descobertos mas omitidos deste ` +
+        `resumo — se esgotar os prioritários, peça-os via \`make_request\` explorando padrões observados.\n\n`
+      : '';
+
   return `## APPMAP DO ALVO
 
 A fase de Percepção produziu o mapa a seguir. Todo conhecimento sobre o alvo vem daqui e das Observations \
@@ -697,7 +813,7 @@ subsequentes.
 ${JSON.stringify(summary, null, 2)}
 \`\`\`
 
-${credencialBlurb}
+${prioritizationNote}${credencialBlurb}
 
 Nas primeiras 3-5 iterações, faça reconhecimento ativo (§1): baixe bundle JS principal se listado, tente \
 \`/robots.txt\`, \`/sitemap.xml\`, \`/.well-known/\`, faça fingerprint de servidor por headers, procure documentação \

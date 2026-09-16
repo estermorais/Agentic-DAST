@@ -54,6 +54,20 @@ export const config = {
     : optional('ANTHROPIC_API_KEY', ''),
   llmModel: optional('LLM_MODEL', 'claude-haiku-4-5-20251001'),
 
+  // ── Temperatura dos provedores hospedados (OpenRouter/Anthropic) ──
+  // O loop ReAct exige JSON estrito e disciplina anti-alucinacao — nao
+  // e uma tarefa criativa. O default dos provedores hospedados e 1.0,
+  // que aumenta variancia de formato e a chance de findings inventados.
+  // Se LLM_TEMPERATURE estiver definida, ela e enviada nas requisicoes
+  // OpenRouter/Anthropic; se NAO estiver, nada e enviado e o
+  // comportamento fica identico ao historico (default 1.0 do provedor),
+  // preservando byte-a-byte o baseline do TCC. Para producao, recomenda-se
+  // LLM_TEMPERATURE=0.2 (ver src/production-mode/README.md). Ollama tem a
+  // sua propria OLLAMA_TEMPERATURE (default 0.2) e ignora esta.
+  llmTemperature: process.env.LLM_TEMPERATURE !== undefined
+    ? parseFloat(process.env.LLM_TEMPERATURE)
+    : undefined,
+
   // ── Ollama (LLM local) ─────────────────────────────────────
   ollamaUrl:   optional('OLLAMA_URL',   'http://localhost:11434'),
   ollamaModel: optional('OLLAMA_MODEL', 'qwen2.5:7b'),

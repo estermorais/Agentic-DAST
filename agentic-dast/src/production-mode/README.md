@@ -93,6 +93,86 @@ Se `READ_ONLY=true`, tudo que não é `SAFE` é **bloqueado sem sequer
 perguntar**. O LLM recebe uma observation dizendo que a ação foi bloqueada
 e sugere alternativa (geralmente muda de estratégia sozinho).
 
+### Priorização da superfície de ataque
+
+Em aplicações reais a Percepção descobre **centenas** de endpoints, mas o
+resumo enviado ao LLM lista apenas os primeiros N (a janela de contexto é
+finita). Se esse corte for por ordem de descoberta, o agente pode nunca ver
+os endpoints que importam.
+
+O `SurfacePrioritizer` (`src/production-mode/SurfacePrioritizer.ts`) reordena
+os endpoints por um **score de risco** antes do corte, para que os que
+sobrevivem sejam os de maior probabilidade de vulnerabilidade:
+
+| Sinal | Peso | Categoria alvo |
+|---|---|---|
+| Método de escrita (POST/PUT/PATCH/DELETE) | +3 (+2 p/ PUT/PATCH/DELETE) | superfície de mutação |
+| `authRequired=false` | +3 | Broken Access Control / exposição |
+| Id numérico na URL | +3 | IDOR |
+| Parâmetro de destino (`url`/`callback`/`webhook`/…) | +3 | SSRF |
+| Rota sensível CRITICAL (billing/webhook/export/…) | +3 | efeito colateral |
+| Rota sensível HIGH (admin/user/config/…) | +2 | escalada |
+| Doc/painel de API (swagger/graphql/actuator/…) | +2 | mapa da superfície |
+| Versão de API antiga/interna, UUID na URL, resposta 500 | +1 | diversos |
+| Recurso estático (.js/.png/.css/…) | −100 | ruído (afunda) |
+
+Nada é descartado do AppMap — apenas a **ordem** muda, e o LLM é avisado de
+quantos endpoints de menor prioridade ficaram fora do resumo. Ajuste quantos
+aparecem com `PROD_MAX_ENDPOINTS` e inspecione a ordenação com
+`PROD_LOG_PRIORITIZATION=true`.
+
+Isto vale **apenas** para o caminho de produção. O baseline do TCC
+(`src/index.ts` → Juice Shop) não passa pelo priorizador e recebe o AppMap
+na ordem original.
+
+### Gestão de contexto e memória de cobertura
+
+Sessões contra apps reais são longas e as respostas HTTP são grandes. Sem
+gestão, o histórico do loop ReAct cresce sem limite: o modelo perde o fio,
+divaga e alucina mais. O `ContextManager`
+(`src/cognitive/ContextManager.ts`), ligado só em produção, faz três coisas
+de forma determinística (sem chamada extra de LLM):
+
+1. **Trunca Observations grandes** ao guardá-las no histórico
+   (`PROD_MAX_OBS_CHARS`), mantendo cabeça+cauda. O texto completo continua
+   em `steps[]`, então o relatório e a evidência não são afetados.
+2. **Compacta o histórico** quando ele passa de `PROD_HISTORY_BUDGET`,
+   elidindo Observations antigas mas preservando o AppMap inicial e as
+   últimas `PROD_RECENT_TURNS` mensagens. Nenhuma mensagem é removida (o
+   alinhamento user/assistant é mantido), só encurtada.
+3. **Injeta memória de cobertura** a cada `PROD_COVERAGE_EVERY` iterações:
+   categorias que já têm finding, categorias ainda sem cobertura, nº de
+   requisições e iterações restantes — reforçando "cobertura antes de
+   profundidade" sem depender da memória do modelo.
+
+### Temperatura
+
+O loop ReAct exige JSON estrito e disciplina anti-alucinação — não é tarefa
+criativa. O default dos provedores hospedados (OpenRouter/Anthropic) é `1.0`,
+que aumenta a variância de formato e a chance de findings inventados. Defina
+`LLM_TEMPERATURE=0.2` em produção. Se não definir, nada é enviado e o
+comportamento fica idêntico ao histórico — por isso o baseline do TCC não é
+afetado, e você pode usar essa variável para um estudo A/B (baseline 1.0 vs
+0.2) com a mesma ground truth, se quiser quantificar o efeito na dissertação.
+
+### Exemplos few-shot
+
+Com `USE_FEWSHOT=true`, o system prompt recebe dois exemplos ilustrativos
+(`FEWSHOT_BLOCK` em `src/cognitive/prompts.ts`):
+
+1. **Achado legítimo** — hipótese → `make_request` → Observation com evidência
+   concreta → `report_finding` ancorado nessa evidência. Ensina o padrão "só
+   reporto o que a Observation demonstrou".
+2. **Sessão inconclusiva** — `finish` com "0 findings" honesto em vez de
+   inventar achados. Ataca a alucinação de frente.
+
+Os exemplos usam um alvo **fictício** (`shop.example`) e são marcados como
+ilustrativos, com instrução explícita para o modelo **não** reaproveitar
+aqueles endpoints/achados no alvo real — só o padrão de raciocínio. Isso
+evita tanto vazar respostas para os alvos avaliados quanto a alucinação por
+mímica (reportar a vuln do exemplo por reflexo). Default off; ligue para
+produção ou para uma ablação A/B (com/sem few-shot).
+
 ---
 
 ## 4. Setup passo a passo
@@ -276,6 +356,14 @@ Qualquer coisa diferente de `CONFIRMO` (case-sensitive) cancela a ação.
 | `RATE_LIMIT_MS` | `500` | Delay em milissegundos entre `make_request` (evita disparar WAF) |
 | `CIRCUIT_BREAKER` | `0` | Encerra sessão após N findings HIGH/CRITICAL. `0` = desativado |
 | `SKIP_ABUSE_CASES` | `false` | Se `true`, pula a fase 3b (Abuse Cases foram feitos para Juice Shop). **Recomenda-se `true` em produção** |
+| `PROD_MAX_ENDPOINTS` | `80` | Quantos endpoints (já priorizados por risco) são listados no resumo enviado ao LLM. Em app real com centenas de endpoints, eleve se o modelo tiver janela de contexto folgada |
+| `PROD_LOG_PRIORITIZATION` | `false` | Se `true`, imprime o top-10 de endpoints por score de risco antes do loop ReAct (útil para conferir a ordenação) |
+| `LLM_TEMPERATURE` | *(unset)* | Temperatura dos provedores hospedados (OpenRouter/Anthropic). **Recomenda-se `0.2` em produção.** Se não definida, usa o default do provedor (1.0) e o baseline do TCC fica idêntico ao histórico |
+| `USE_FEWSHOT` | `false` | Se `true`, anexa 2 exemplos ilustrativos (achado legítimo + sessão inconclusiva honesta) ao system prompt, para reduzir alucinação. Domínio fictício, não vaza o alvo. Também serve de ablação A/B |
+| `PROD_MAX_OBS_CHARS` | `4000` | Tamanho máx. de uma Observation guardada no histórico (o texto completo fica em `steps[]`/relatório). `0` desativa |
+| `PROD_HISTORY_BUDGET` | `60000` | Orçamento de caracteres do histórico; acima disso, Observations antigas são elididas. `0` desativa |
+| `PROD_RECENT_TURNS` | `8` | Quantas mensagens finais preservar verbatim na compactação |
+| `PROD_COVERAGE_EVERY` | `5` | A cada quantas iterações injetar a nota de cobertura (categorias testadas, faltantes, orçamento). `0` desativa |
 
 ### Combinações mais comuns
 
@@ -286,7 +374,7 @@ READ_ONLY=true INTERACTIVE=false SKIP_ABUSE_CASES=true
 
 **Modo produção seguro** (recomendado para uso rotineiro):
 ```
-INTERACTIVE=true CIRCUIT_BREAKER=5 RATE_LIMIT_MS=1000 SKIP_ABUSE_CASES=true
+INTERACTIVE=true CIRCUIT_BREAKER=5 RATE_LIMIT_MS=1000 SKIP_ABUSE_CASES=true LLM_TEMPERATURE=0.2
 ```
 
 **Modo produção agressivo** (só após várias rodadas OK):
@@ -392,9 +480,16 @@ que não devem ser misturados com os relatórios oficiais.
 
 **Q: O modo produção afeta as métricas do experimento do TCC?**
 
-R: Não. Este módulo não altera nenhum arquivo dos módulos principais
-(`src/cognitive/`, `src/executor/`). Os experimentos do TCC 2
-continuam rodando exatamente como antes, com a mesma reprodutibilidade.
+R: Não. O modo produção estende dois pontos de `src/cognitive/`
+(`buildInitialUserMessage` ganhou um parâmetro opcional de opções, e
+`ReActAgent.run` o repassa) de forma **retrocompatível**: quando chamados
+sem esse parâmetro — que é exatamente o caso do entrypoint oficial
+`src/index.ts` — o texto do prompt e o comportamento são idênticos byte-a-byte
+aos da rodada n=30. A priorização de superfície (`SurfacePrioritizer`) vive
+em `src/production-mode/` e só é acionada pelo `production-runner`. Os
+experimentos do TCC 2 continuam rodando exatamente como antes, com a mesma
+reprodutibilidade. Para confirmar, compare o output de `buildInitialUserMessage`
+sem opts contra um relatório antigo — deve ser igual.
 
 **Q: E se o LLM tentar burlar o classificador (por exemplo, usando POST
 em URL que não bate com nenhum padrão CRITICAL)?**

@@ -16,10 +16,17 @@
 import { config } from '../config';
 import { AppMap } from '../perception/types';
 import {
-  SYSTEM_PROMPT,
+  buildSystemPrompt,
   buildInitialUserMessage,
   buildObservationMessage,
+  InitialMessageOptions,
 } from './prompts';
+import {
+  ContextManagementOptions,
+  truncateObservation,
+  compactHistory,
+  buildCoverageNote,
+} from './ContextManager';
 import { ActionDispatcher, ParsedAction, Finding } from '../executor/ActionDispatcher';
 import { ChatMessage, LLMClient, createLLMClient } from './LLMClient';
 import { TARGET_DOWN_MARKER } from '../executor/abilities/HttpClient';
@@ -31,6 +38,21 @@ export interface ReActStep {
   action: ParsedAction;
   observation: string;
   timestamp: Date;
+}
+
+/**
+ * Opções de execução do loop ReAct. Ambos os campos são opcionais e,
+ * quando ausentes (caso do entrypoint oficial do TCC), o comportamento
+ * é idêntico ao histórico: prompt inicial padrão e histórico sem
+ * gestão de contexto. Só o caminho de produção as preenche.
+ */
+export interface RunOptions {
+  /** Opções da mensagem inicial (priorização/quantidade de endpoints). */
+  initialMessage?: InitialMessageOptions;
+  /** Gestão de contexto + memória de cobertura (ver ContextManager). */
+  contextManagement?: ContextManagementOptions;
+  /** Anexa exemplos few-shot ao system prompt (reduz alucinação). */
+  fewShot?: boolean;
 }
 
 /** Resultado final da sessão de testes */
@@ -56,7 +78,11 @@ export class ReActAgent {
    * Executa o loop ReAct completo dado um AppMap.
    * Retorna todas as vulnerabilidades encontradas e os passos tomados.
    */
-  async run(appMap: AppMap): Promise<AgentResult> {
+  async run(appMap: AppMap, opts?: RunOptions): Promise<AgentResult> {
+    const ctxOpts = opts?.contextManagement;
+    // System prompt estático da sessão (com ou sem few-shot). Sem opts,
+    // é idêntico byte-a-byte ao SYSTEM_PROMPT do baseline do TCC.
+    const systemPrompt = buildSystemPrompt({ fewShot: opts?.fewShot });
     console.log('\n[Cognitivo] Iniciando loop ReAct...');
     console.log(`[Cognitivo] LLM: ${this.llm.name}`);
     console.log(`[Cognitivo] Máximo de iterações: ${config.maxReactIterations}\n`);
@@ -64,7 +90,7 @@ export class ReActAgent {
     const steps: ReActStep[] = [];
 
     // Primeira mensagem: o AppMap para o LLM analisar
-    const initialMessage = buildInitialUserMessage(appMap);
+    const initialMessage = buildInitialUserMessage(appMap, opts?.initialMessage);
     this.conversationHistory.push({
       role: 'user',
       content: initialMessage,
@@ -82,8 +108,16 @@ export class ReActAgent {
     for (let i = 1; i <= config.maxReactIterations; i++) {
       console.log(`\n[Cognitivo] ── Iteração ${i}/${config.maxReactIterations} ──`);
 
+      // 0. Gestão de contexto (produção apenas): compacta Observations
+      // antigas quando o histórico excede o orçamento, preservando o
+      // AppMap inicial e os turnos recentes. Os steps[] mantêm o texto
+      // completo, então o relatório/evidência não é afetado.
+      if (ctxOpts) {
+        this.conversationHistory = compactHistory(this.conversationHistory, ctxOpts);
+      }
+
       // 1. Chama o LLM (Anthropic ou Ollama, transparente para o loop)
-      const rawText = await this.llm.chat(SYSTEM_PROMPT, this.conversationHistory);
+      const rawText = await this.llm.chat(systemPrompt, this.conversationHistory);
 
       console.log('[Cognitivo] LLM respondeu:\n', rawText.substring(0, 300), '...');
 
@@ -225,10 +259,33 @@ export class ReActAgent {
         };
       }
 
-      // 7. Adiciona a Observation ao histórico para a próxima iteração
+      // 7. Adiciona a Observation ao histórico para a próxima iteração.
+      // Em produção (ctxOpts): trunca Observations grandes ao guardar
+      // (o texto completo permanece em steps[]) e injeta periodicamente
+      // uma nota de cobertura para reforçar breadth e reduzir repetição.
+      let observationForHistory = observation;
+      if (ctxOpts?.maxObservationChars) {
+        observationForHistory = truncateObservation(observation, ctxOpts.maxObservationChars);
+      }
+
+      let observationMessage = buildObservationMessage(observationForHistory);
+      const coverageCadence = ctxOpts?.coverageEveryNIters ?? 0;
+      if (coverageCadence > 0 && i % coverageCadence === 0) {
+        const categoriesWithFindings = Array.from(
+          new Set(this.dispatcher.getFindings().map((f) => f.category).filter(Boolean)),
+        );
+        const endpointsTested = steps.filter((s) => s.action.action === 'make_request').length;
+        observationMessage += buildCoverageNote({
+          categoriesWithFindings,
+          endpointsTested,
+          iteration: i,
+          maxIterations: config.maxReactIterations,
+        });
+      }
+
       this.conversationHistory.push({
         role: 'user',
-        content: buildObservationMessage(observation),
+        content: observationMessage,
       });
     }
 

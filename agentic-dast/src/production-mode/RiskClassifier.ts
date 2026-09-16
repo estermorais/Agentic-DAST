@@ -20,7 +20,7 @@ export type RiskLevel = 'safe' | 'medium' | 'high' | 'critical';
  * externo (envio de mensagem, webhook, exportacao de dados).
  * Comparacao case-insensitive.
  */
-const CRITICAL_PATH_PATTERNS = [
+export const CRITICAL_PATH_PATTERNS = [
   /\/message/i,
   /\/mail/i,
   /\/email/i,
@@ -44,7 +44,7 @@ const CRITICAL_PATH_PATTERNS = [
  * com metodo destrutivo. Rotas de administracao, gestao de usuarios,
  * permissoes, etc.
  */
-const HIGH_PATH_PATTERNS = [
+export const HIGH_PATH_PATTERNS = [
   /\/admin/i,
   /\/user/i,
   /\/permission/i,

@@ -66,6 +66,11 @@ class OpenRouterClient implements LLMClient {
         {
           model: this.model,
           max_tokens: 2048,
+          // Temperatura só é enviada se LLM_TEMPERATURE estiver definida;
+          // caso contrário usa o default do provedor (preserva o baseline).
+          ...(config.llmTemperature !== undefined
+            ? { temperature: config.llmTemperature }
+            : {}),
           messages: [
             // Prompt Caching estilo Anthropic via OpenRouter: o campo
             // 'content' de string vira array de blocos com cache_control
@@ -172,6 +177,11 @@ class AnthropicClient implements LLMClient {
     const response = await this.client.messages.create({
       model: config.llmModel,
       max_tokens: 2048,
+      // Ver nota em OpenRouterClient/config.llmTemperature: só envia se
+      // LLM_TEMPERATURE estiver definida, senão usa o default (1.0).
+      ...(config.llmTemperature !== undefined
+        ? { temperature: config.llmTemperature }
+        : {}),
       system: [
         {
           type: 'text',

@@ -40,6 +40,7 @@ import { config }                    from '../config';
 
 import { SafeDispatcher } from './SafeDispatcher';
 import { summaryClaimsVulnerabilities } from '../cognitive/ReActAgent';
+import { prioritizeAppMap, rankEndpoints } from './SurfacePrioritizer';
 
 function parseEnvBool(name: string, defaultValue: boolean): boolean {
   const v = process.env[name];
@@ -131,7 +132,45 @@ async function main(): Promise<void> {
     // dispatch() e getFindings(), ambos presentes no SafeDispatcher.
     console.log('[ FASE 3 ] Cognição — executando loop ReAct...\n');
     const agent = new ReActAgent(safeDispatcher as unknown as ActionDispatcher);
-    const result: AgentResult = await agent.run(appMap);
+
+    // Priorização da superfície de ataque (só no caminho de produção).
+    // Em app real a Percepção descobre centenas de endpoints; o resumo
+    // enviado ao LLM lista apenas os primeiros N. Reordenamos por RISCO
+    // para que os N que sobrevivem ao corte sejam os mais promissores,
+    // e elevamos N (PROD_MAX_ENDPOINTS, default 80). Nada é descartado —
+    // só a ordem muda. O baseline do TCC (src/index.ts) não passa por aqui.
+    const prioritizedAppMap = prioritizeAppMap(appMap);
+    const maxEndpoints = parseInt(process.env.PROD_MAX_ENDPOINTS ?? '80', 10);
+
+    if (process.env.PROD_LOG_PRIORITIZATION === 'true') {
+      const top = rankEndpoints(appMap.apiEndpoints).slice(0, 10);
+      console.log('[Priorização] Top endpoints por risco:');
+      top.forEach((r, i) =>
+        console.log(
+          `  ${String(i + 1).padStart(2)}. [score ${r.score}] ${r.endpoint.method} ` +
+          `${r.endpoint.url}  (${r.reasons.join('; ')})`,
+        ),
+      );
+      console.log('');
+    }
+
+    const result: AgentResult = await agent.run(prioritizedAppMap, {
+      initialMessage: { maxEndpoints, prioritized: true },
+      // Few-shot opt-in (USE_FEWSHOT=true): anexa 2 exemplos ilustrativos
+      // (achado legítimo + sessão inconclusiva honesta) ao system prompt,
+      // para reduzir alucinação. Default off.
+      fewShot: process.env.USE_FEWSHOT === 'true',
+      // Gestão de contexto ligada em produção: sessões contra apps reais
+      // são longas e as respostas grandes. Trunca Observations, compacta
+      // histórico antigo e injeta memória de cobertura a cada 5 iterações.
+      // Ajustável por env (defaults do ContextManager se não definido).
+      contextManagement: {
+        maxObservationChars: parseInt(process.env.PROD_MAX_OBS_CHARS ?? '4000', 10),
+        historyCharBudget: parseInt(process.env.PROD_HISTORY_BUDGET ?? '60000', 10),
+        recentTurnsVerbatim: parseInt(process.env.PROD_RECENT_TURNS ?? '8', 10),
+        coverageEveryNIters: parseInt(process.env.PROD_COVERAGE_EVERY ?? '5', 10),
+      },
+    });
 
     // Fase 3b: Abuse Cases (rodam via HttpClient direto, NAO passam pelo
     // SafeDispatcher). Em modo produção autorizado, o operador humano deve
