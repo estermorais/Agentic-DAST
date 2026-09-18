@@ -6,6 +6,11 @@ node_modules/
 .env.local
 .env.*.local
 
+# Cache de sessão do modo produção (material de autenticação cifrado —
+# NUNCA versionar, mesmo cifrado)
+.session-cache/
+agentic-dast/.session-cache/
+
 # Build TypeScript — a pasta dist/ é versionada (contém os .js compilados),
 # mas os arquivos auxiliares (.js.map e .d.ts) são ignorados para manter o
 # diff limpo e o repositório legível.

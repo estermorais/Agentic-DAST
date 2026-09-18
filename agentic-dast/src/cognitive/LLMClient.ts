@@ -35,6 +35,14 @@ export interface LLMClient {
 
   /** Identificador legível para logging e relatórios */
   readonly name: string;
+
+  /**
+   * Custo acumulado (USD) de todas as chamadas feitas por este cliente
+   * nesta execução. Usado pelo budget stop do loop ReAct. Providers sem
+   * custo monetário (Ollama local, claude-cli via assinatura) retornam 0
+   * — o budget stop simplesmente nunca dispara para eles.
+   */
+  readonly totalCostUSD: number;
 }
 
 // ===========================================================
@@ -51,6 +59,9 @@ class OpenRouterClient implements LLMClient {
   private readonly apiKey: string;
   private readonly model:  string;
   private readonly baseUrl: string;
+  private _totalCostUSD = 0;
+
+  get totalCostUSD(): number { return this._totalCostUSD; }
 
   constructor() {
     this.apiKey  = config.openrouterApiKey;
@@ -140,11 +151,13 @@ class OpenRouterClient implements LLMClient {
            cacheRead    * config.llmPriceCacheRead +
            output       * config.llmPriceOutput) / 1_000_000;
 
+        this._totalCostUSD += costUSD;
         const cacheHit = inputTotal > 0 ? (cacheRead / inputTotal * 100).toFixed(0) : '0';
         console.log(
           `  [LLM] input=${inputTotal} (cache_read=${cacheRead}/${cacheHit}%, ` +
           `cache_write=${cacheWrite}, regular=${inputRegular}) ` +
-          `output=${output} custo≈$${costUSD.toFixed(4)}`
+          `output=${output} custo≈$${costUSD.toFixed(4)} ` +
+          `(acumulado≈$${this._totalCostUSD.toFixed(4)})`
         );
       }
 
@@ -168,6 +181,9 @@ class OpenRouterClient implements LLMClient {
 class AnthropicClient implements LLMClient {
   readonly name: string;
   private readonly client: Anthropic;
+  private _totalCostUSD = 0;
+
+  get totalCostUSD(): number { return this._totalCostUSD; }
 
   constructor() {
     this.client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -195,6 +211,27 @@ class AnthropicClient implements LLMClient {
       messages: history,
     });
 
+    // Telemetria de custo (mesmas tarifas de config.llmPrice*), para o
+    // budget stop funcionar tambem via chamada direta a Anthropic.
+    const u = response.usage;
+    if (u) {
+      const cacheWrite = u.cache_creation_input_tokens ?? 0;
+      const cacheRead  = u.cache_read_input_tokens ?? 0;
+      const inputReg   = u.input_tokens ?? 0;
+      const output     = u.output_tokens ?? 0;
+      const costUSD =
+        (inputReg    * config.llmPriceInput +
+         cacheWrite  * config.llmPriceCacheWrite +
+         cacheRead   * config.llmPriceCacheRead +
+         output      * config.llmPriceOutput) / 1_000_000;
+      this._totalCostUSD += costUSD;
+      console.log(
+        `  [LLM] input=${inputReg} (cache_read=${cacheRead}, cache_write=${cacheWrite}) ` +
+        `output=${output} custo≈$${costUSD.toFixed(4)} ` +
+        `(acumulado≈$${this._totalCostUSD.toFixed(4)})`
+      );
+    }
+
     return response.content[0]?.type === 'text' ? response.content[0].text : '';
   }
 }
@@ -205,6 +242,8 @@ class AnthropicClient implements LLMClient {
 
 class OllamaClient implements LLMClient {
   readonly name: string;
+  /** LLM local — sem custo monetário; budget stop nunca dispara. */
+  readonly totalCostUSD = 0;
   private readonly baseUrl: string;
   private readonly model:   string;
 
@@ -327,6 +366,8 @@ const CLI_ROLE_LOCK = [
 
 class ClaudeCliClient implements LLMClient {
   readonly name: string;
+  /** Via assinatura (Claude Pro/Max) — sem custo por token medido aqui. */
+  readonly totalCostUSD = 0;
   private readonly model: string;
 
   constructor() {

@@ -17,6 +17,20 @@
  *   RATE_LIMIT_MS=1000         Delay entre make_requests. Default: 500.
  *   CIRCUIT_BREAKER=5          Encerra apos N findings HIGH/CRITICAL.
  *                              Default: 0 (desativado).
+ *   MAX_COST_USD=1.50          Orcamento de gasto (USD) do loop ReAct: o
+ *                              agente para quando o custo do LLM passa
+ *                              disso (o que vier antes de MAX_REACT_
+ *                              ITERATIONS). Default: 0 (desativado).
+ *   SESSION_CACHE=true|false   Salva a sessao do login manual CIFRADA em
+ *                              .session-cache/ e reaproveita nas proximas
+ *                              runs (se valida). Default: true.
+ *   FORCE_REAUTH=true|false    Ignora o cache e refaz o login manual,
+ *                              sobrescrevendo a sessao salva. Default: false.
+ *   SESSION_PASSPHRASE=...     Senha p/ cifrar a sessao (AES-256-GCM).
+ *                              Vazio: chave derivada da maquina.
+ *
+ * Ao final grava DOIS relatorios em reports/: report-production-<ts>.json
+ * (bruto) e report-production-<ts>.md (tecnico, legivel).
  *
  * Uso recomendado (primeira rodada em producao):
  *   READ_ONLY=true INTERACTIVE=true AUDIT_LOG=./logs/prod-audit.csv \
@@ -41,6 +55,17 @@ import { config }                    from '../config';
 import { SafeDispatcher } from './SafeDispatcher';
 import { summaryClaimsVulnerabilities } from '../cognitive/ReActAgent';
 import { prioritizeAppMap, rankEndpoints } from './SurfacePrioritizer';
+import { renderMarkdownReport, ProductionReport } from './report-render';
+
+/** Rotulo do modelo LLM ativo, para o relatorio. */
+function llmLabel(): string {
+  switch (config.llmProvider) {
+    case 'openrouter': return `openrouter/${config.openrouterModel}`;
+    case 'anthropic':  return config.llmModel;
+    case 'ollama':     return `ollama/${config.ollamaModel}`;
+    default:           return config.llmProvider;
+  }
+}
 
 function parseEnvBool(name: string, defaultValue: boolean): boolean {
   const v = process.env[name];
@@ -71,6 +96,11 @@ async function main(): Promise<void> {
   console.log(`  AUDIT_LOG        : ${auditLog || '(desativado)'}`);
   console.log(`  RATE_LIMIT_MS    : ${rateLimitMs}`);
   console.log(`  CIRCUIT_BREAKER  : ${circuitBreak || '(desativado)'}`);
+  console.log(`  MAX_REACT_ITER   : ${config.maxReactIterations}`);
+  console.log(`  MAX_COST_USD     : ${config.maxCostUSD > 0
+    ? '$' + config.maxCostUSD : '(desativado — só limita por iterações)'}`);
+  console.log(`  SESSION_CACHE    : ${config.sessionCache}${
+    config.forceReauth ? ' (FORCE_REAUTH=true — vai reautenticar)' : ''}`);
   console.log(`  Alvo (targetUrl) : ${config.targetUrl}\n`);
 
   if (!readOnly && !interactive) {
@@ -213,7 +243,8 @@ async function main(): Promise<void> {
 
     console.log('\n[ FASE 4 ] Relatório final\n');
     printReport(result, abuseFindings, zapFindings, allFindings);
-    saveReport(result, abuseFindings, zapFindings, allFindings);
+    const sessionReused = appMap.auth.userEmail === '(sessao em cache)';
+    saveReport(result, abuseFindings, zapFindings, allFindings, sessionReused);
   } catch (err) {
     console.error('\n[ERRO FATAL]', (err as Error).message);
     console.error((err as Error).stack);
@@ -245,6 +276,8 @@ function printReport(
   console.log('RESUMO DA SESSÃO (MODO PRODUÇÃO)');
   console.log(divider);
   console.log(`Iterações ReAct      : ${agentResult.totalIterations}`);
+  console.log(`Custo estimado (LLM) : $${agentResult.totalCostUSD.toFixed(4)}${
+    config.maxCostUSD > 0 ? ` / $${config.maxCostUSD} (orçamento)` : ''}`);
   console.log(`Encerramento limpo   : ${agentResult.finishedCleanly ? 'sim' : 'não'}`);
   console.log(`Findings (ReAct)     : ${agentResult.findings.length}`);
   console.log(`Findings (AbuseCases): ${abuseFindings.length}`);
@@ -281,6 +314,7 @@ function saveReport(
   abuseFindings: Finding[],
   zapFindings: Finding[],
   allFindings: Finding[],
+  sessionReused = false,
 ): void {
   const reportsDir = path.join(__dirname, '..', '..', 'reports');
   if (!fs.existsSync(reportsDir)) {
@@ -289,6 +323,7 @@ function saveReport(
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename  = path.join(reportsDir, `report-production-${timestamp}.json`);
+  const mdFilename = path.join(reportsDir, `report-production-${timestamp}.md`);
 
   // Warning anti-alucinacao: se o summary do finish afirma vulnerabilidades
   // mas nenhum finding estruturado foi materializado, adiciona um flag
@@ -306,12 +341,15 @@ function saveReport(
     );
   }
 
-  const report = {
+  const report: ProductionReport = {
     mode:            'production',
     generatedAt:     new Date().toISOString(),
+    target:          config.targetUrl,
+    llmModel:        llmLabel(),
     summary:         agentResult.summary,
     finishedCleanly: agentResult.finishedCleanly,
     totalIterations: agentResult.totalIterations,
+    costUSD:         agentResult.totalCostUSD,
     warnings:        suspectedHallucination ? [
       'suspected-hallucination: summary claims vulnerabilities but no ' +
       'structured findings were emitted via Action:report_finding. Do not ' +
@@ -319,9 +357,12 @@ function saveReport(
       'verify each claim against actual HTTP responses recorded.'
     ] : [],
     config: {
-      readOnly:    parseEnvBool('READ_ONLY', false),
-      interactive: parseEnvBool('INTERACTIVE', true),
-      rateLimitMs: parseEnvNumber('RATE_LIMIT_MS', 500),
+      readOnly:           parseEnvBool('READ_ONLY', false),
+      interactive:        parseEnvBool('INTERACTIVE', true),
+      rateLimitMs:        parseEnvNumber('RATE_LIMIT_MS', 500),
+      sessionReused,
+      maxReactIterations: config.maxReactIterations,
+      maxCostUSD:         config.maxCostUSD,
     },
     findingsSummary: {
       reactAgent: agentResult.findings.length,
@@ -330,6 +371,9 @@ function saveReport(
       total:      allFindings.length,
     },
     findings: allFindings,
+    // O JSON trunca a observation em 500 chars (baseline). O Markdown,
+    // gerado a partir do MESMO objeto, herda esse corte — mantendo o
+    // relatorio legivel e os dois artefatos consistentes.
     steps: agentResult.steps.map((s) => ({
       iteration:   s.iteration,
       thought:     s.thought,
@@ -340,7 +384,14 @@ function saveReport(
   };
 
   fs.writeFileSync(filename, JSON.stringify(report, null, 2), 'utf-8');
-  console.log(`\nRelatório salvo em: ${filename}`);
+  console.log(`\nRelatório (JSON) salvo em: ${filename}`);
+
+  try {
+    fs.writeFileSync(mdFilename, renderMarkdownReport(report), 'utf-8');
+    console.log(`Relatório (Markdown) salvo em: ${mdFilename}`);
+  } catch (err) {
+    console.warn(`Falha ao gerar relatório Markdown: ${(err as Error).message}`);
+  }
 }
 
 main().catch((err) => {

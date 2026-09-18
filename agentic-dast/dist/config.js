@@ -142,6 +142,29 @@ exports.config = {
     // no terminal. Alternativa ao MANUAL_JWT/MANUAL_COOKIES quando
     // e mais pratico logar interativamente do que colar tokens.
     interactiveLogin: optional('INTERACTIVE_LOGIN', 'false').toLowerCase() === 'true',
+    // ── Cache de sessao (modo producao) ────────────────────────
+    // SESSION_CACHE: se 'true' (default), a sessao capturada no login
+    //   manual (INTERACTIVE_LOGIN) e salva CIFRADA em .session-cache/ e
+    //   reaproveitada nas execucoes seguintes — se ainda for valida. Evita
+    //   refazer o login (senha+MFA+SSO) a cada teste. So tem efeito no
+    //   entrypoint de producao (production-runner.ts).
+    sessionCache: optional('SESSION_CACHE', 'true').toLowerCase() === 'true',
+    // FORCE_REAUTH: se 'true', ignora qualquer sessao em cache e forca o
+    //   login manual de novo, sobrescrevendo a sessao salva. Use quando a
+    //   sessao expirou de forma que a verificacao nao pegou, ou quando quer
+    //   trocar de usuario/permissao.
+    forceReauth: optional('FORCE_REAUTH', 'false').toLowerCase() === 'true',
+    // SESSION_PASSPHRASE: senha para cifrar/decifrar a sessao salva. Se
+    //   vazia, usa-se uma chave derivada da maquina (protege contra leitura
+    //   casual do disco, nao contra um atacante com acesso a mesma conta).
+    //   Defina para endurecer. Se mudar a passphrase, o cache antigo vira
+    //   ilegivel e o login e refeito.
+    sessionPassphrase: optional('SESSION_PASSPHRASE', ''),
+    // SESSION_MAX_AGE_MIN: idade maxima (minutos) de uma sessao em cache
+    //   antes de ser considerada velha e descartada sem sequer testar.
+    //   Default 720 (12h). 0 = sem limite de idade (so a verificacao real
+    //   decide).
+    sessionMaxAgeMin: parseInt(optional('SESSION_MAX_AGE_MIN', '720'), 10),
     // ── Alvo ───────────────────────────────────────────────────
     // URL do alvo do ponto de vista do HOST (axios direto, relatório)
     targetUrl: _targetUrl,
@@ -162,6 +185,14 @@ exports.config = {
     zapProxyPort: parseInt(optional('ZAP_PROXY_PORT', '8080')),
     // ── Comportamento do agente ────────────────────────────────
     maxReactIterations: parseInt(optional('MAX_REACT_ITERATIONS', '25')),
+    // MAX_COST_USD: orcamento de gasto (USD) do loop ReAct. Quando > 0, o
+    //   agente encerra assim que o custo acumulado das chamadas ao LLM
+    //   ultrapassa esse valor — criterio de parada por dinheiro, alternativo/
+    //   complementar ao MAX_REACT_ITERATIONS (o que vier primeiro para o
+    //   loop). 0 = desativado (so o numero de iteracoes limita). So tem
+    //   efeito com providers que medem custo (OpenRouter, Anthropic); em
+    //   Ollama/claude-cli o custo e sempre 0 e este limite nunca dispara.
+    maxCostUSD: parseFloat(optional('MAX_COST_USD', '0')),
     useZapProxy: _useZapProxy,
     // ── Caps de tamanho de corpo nas Observations ──────────────
     // Defaults IDENTICOS ao comportamento historico: sem estas envs, as

@@ -18,6 +18,20 @@
  *   RATE_LIMIT_MS=1000         Delay entre make_requests. Default: 500.
  *   CIRCUIT_BREAKER=5          Encerra apos N findings HIGH/CRITICAL.
  *                              Default: 0 (desativado).
+ *   MAX_COST_USD=1.50          Orcamento de gasto (USD) do loop ReAct: o
+ *                              agente para quando o custo do LLM passa
+ *                              disso (o que vier antes de MAX_REACT_
+ *                              ITERATIONS). Default: 0 (desativado).
+ *   SESSION_CACHE=true|false   Salva a sessao do login manual CIFRADA em
+ *                              .session-cache/ e reaproveita nas proximas
+ *                              runs (se valida). Default: true.
+ *   FORCE_REAUTH=true|false    Ignora o cache e refaz o login manual,
+ *                              sobrescrevendo a sessao salva. Default: false.
+ *   SESSION_PASSPHRASE=...     Senha p/ cifrar a sessao (AES-256-GCM).
+ *                              Vazio: chave derivada da maquina.
+ *
+ * Ao final grava DOIS relatorios em reports/: report-production-<ts>.json
+ * (bruto) e report-production-<ts>.md (tecnico, legivel).
  *
  * Uso recomendado (primeira rodada em producao):
  *   READ_ONLY=true INTERACTIVE=true AUDIT_LOG=./logs/prod-audit.csv \
@@ -73,6 +87,16 @@ const config_1 = require("../config");
 const SafeDispatcher_1 = require("./SafeDispatcher");
 const ReActAgent_2 = require("../cognitive/ReActAgent");
 const SurfacePrioritizer_1 = require("./SurfacePrioritizer");
+const report_render_1 = require("./report-render");
+/** Rotulo do modelo LLM ativo, para o relatorio. */
+function llmLabel() {
+    switch (config_1.config.llmProvider) {
+        case 'openrouter': return `openrouter/${config_1.config.openrouterModel}`;
+        case 'anthropic': return config_1.config.llmModel;
+        case 'ollama': return `ollama/${config_1.config.ollamaModel}`;
+        default: return config_1.config.llmProvider;
+    }
+}
 function parseEnvBool(name, defaultValue) {
     const v = process.env[name];
     if (v === undefined)
@@ -101,6 +125,10 @@ async function main() {
     console.log(`  AUDIT_LOG        : ${auditLog || '(desativado)'}`);
     console.log(`  RATE_LIMIT_MS    : ${rateLimitMs}`);
     console.log(`  CIRCUIT_BREAKER  : ${circuitBreak || '(desativado)'}`);
+    console.log(`  MAX_REACT_ITER   : ${config_1.config.maxReactIterations}`);
+    console.log(`  MAX_COST_USD     : ${config_1.config.maxCostUSD > 0
+        ? '$' + config_1.config.maxCostUSD : '(desativado — só limita por iterações)'}`);
+    console.log(`  SESSION_CACHE    : ${config_1.config.sessionCache}${config_1.config.forceReauth ? ' (FORCE_REAUTH=true — vai reautenticar)' : ''}`);
     console.log(`  Alvo (targetUrl) : ${config_1.config.targetUrl}\n`);
     if (!readOnly && !interactive) {
         console.warn('[AVISO] READ_ONLY=false e INTERACTIVE=false — nenhuma proteção ativa. ' +
@@ -215,7 +243,8 @@ async function main() {
         ]);
         console.log('\n[ FASE 4 ] Relatório final\n');
         printReport(result, abuseFindings, zapFindings, allFindings);
-        saveReport(result, abuseFindings, zapFindings, allFindings);
+        const sessionReused = appMap.auth.userEmail === '(sessao em cache)';
+        saveReport(result, abuseFindings, zapFindings, allFindings, sessionReused);
     }
     catch (err) {
         console.error('\n[ERRO FATAL]', err.message);
@@ -242,6 +271,7 @@ function printReport(agentResult, abuseFindings, zapFindings, allFindings) {
     console.log('RESUMO DA SESSÃO (MODO PRODUÇÃO)');
     console.log(divider);
     console.log(`Iterações ReAct      : ${agentResult.totalIterations}`);
+    console.log(`Custo estimado (LLM) : $${agentResult.totalCostUSD.toFixed(4)}${config_1.config.maxCostUSD > 0 ? ` / $${config_1.config.maxCostUSD} (orçamento)` : ''}`);
     console.log(`Encerramento limpo   : ${agentResult.finishedCleanly ? 'sim' : 'não'}`);
     console.log(`Findings (ReAct)     : ${agentResult.findings.length}`);
     console.log(`Findings (AbuseCases): ${abuseFindings.length}`);
@@ -270,13 +300,14 @@ function printReport(agentResult, abuseFindings, zapFindings, allFindings) {
         console.log();
     });
 }
-function saveReport(agentResult, abuseFindings, zapFindings, allFindings) {
+function saveReport(agentResult, abuseFindings, zapFindings, allFindings, sessionReused = false) {
     const reportsDir = path.join(__dirname, '..', '..', 'reports');
     if (!fs.existsSync(reportsDir)) {
         fs.mkdirSync(reportsDir, { recursive: true });
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = path.join(reportsDir, `report-production-${timestamp}.json`);
+    const mdFilename = path.join(reportsDir, `report-production-${timestamp}.md`);
     // Warning anti-alucinacao: se o summary do finish afirma vulnerabilidades
     // mas nenhum finding estruturado foi materializado, adiciona um flag
     // explicito no relatorio. Segunda linha de defesa; a primeira e o guard
@@ -292,9 +323,12 @@ function saveReport(agentResult, abuseFindings, zapFindings, allFindings) {
     const report = {
         mode: 'production',
         generatedAt: new Date().toISOString(),
+        target: config_1.config.targetUrl,
+        llmModel: llmLabel(),
         summary: agentResult.summary,
         finishedCleanly: agentResult.finishedCleanly,
         totalIterations: agentResult.totalIterations,
+        costUSD: agentResult.totalCostUSD,
         warnings: suspectedHallucination ? [
             'suspected-hallucination: summary claims vulnerabilities but no ' +
                 'structured findings were emitted via Action:report_finding. Do not ' +
@@ -305,6 +339,9 @@ function saveReport(agentResult, abuseFindings, zapFindings, allFindings) {
             readOnly: parseEnvBool('READ_ONLY', false),
             interactive: parseEnvBool('INTERACTIVE', true),
             rateLimitMs: parseEnvNumber('RATE_LIMIT_MS', 500),
+            sessionReused,
+            maxReactIterations: config_1.config.maxReactIterations,
+            maxCostUSD: config_1.config.maxCostUSD,
         },
         findingsSummary: {
             reactAgent: agentResult.findings.length,
@@ -313,6 +350,9 @@ function saveReport(agentResult, abuseFindings, zapFindings, allFindings) {
             total: allFindings.length,
         },
         findings: allFindings,
+        // O JSON trunca a observation em 500 chars (baseline). O Markdown,
+        // gerado a partir do MESMO objeto, herda esse corte — mantendo o
+        // relatorio legivel e os dois artefatos consistentes.
         steps: agentResult.steps.map((s) => ({
             iteration: s.iteration,
             thought: s.thought,
@@ -322,7 +362,14 @@ function saveReport(agentResult, abuseFindings, zapFindings, allFindings) {
         })),
     };
     fs.writeFileSync(filename, JSON.stringify(report, null, 2), 'utf-8');
-    console.log(`\nRelatório salvo em: ${filename}`);
+    console.log(`\nRelatório (JSON) salvo em: ${filename}`);
+    try {
+        fs.writeFileSync(mdFilename, (0, report_render_1.renderMarkdownReport)(report), 'utf-8');
+        console.log(`Relatório (Markdown) salvo em: ${mdFilename}`);
+    }
+    catch (err) {
+        console.warn(`Falha ao gerar relatório Markdown: ${err.message}`);
+    }
 }
 main().catch((err) => {
     console.error('[ERRO NÃO TRATADO]', err);

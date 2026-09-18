@@ -92,6 +92,7 @@ class ReActAgent {
                         finishedCleanly: false,
                         summary: `Parser falhou ${MAX_CONSECUTIVE_PARSE_FAILURES}x consecutivas ate a iteracao ${i}. ` +
                             `O modelo (${this.llm.name}) parou de seguir o formato ReAct.`,
+                        totalCostUSD: this.llm.totalCostUSD,
                     };
                 }
                 // Feedback explicito para o LLM reformatar. Nao registra step
@@ -150,6 +151,7 @@ class ReActAgent {
                     totalIterations: i,
                     finishedCleanly: true,
                     summary,
+                    totalCostUSD: this.llm.totalCostUSD,
                 };
             }
             // 5. Executa a ação no mundo real via ActionDispatcher
@@ -185,6 +187,27 @@ class ReActAgent {
                     summary: `Alvo indisponivel mid-run (juice-shop caiu apos ${i} iteracoes). ` +
                         `Circuit breaker aberto no HttpClient. Findings coletados antes da ` +
                         `queda foram preservados. Marque este run como parcial no analise.`,
+                    totalCostUSD: this.llm.totalCostUSD,
+                };
+            }
+            // 6c. Budget stop: se MAX_COST_USD > 0 e o custo acumulado das
+            // chamadas ao LLM ja ultrapassou o orcamento, encerra o loop —
+            // criterio de parada por dinheiro, complementar ao limite de
+            // iteracoes (o que vier primeiro). Custo 0 (Ollama/claude-cli) ou
+            // MAX_COST_USD=0 nunca disparam.
+            const spent = this.llm.totalCostUSD;
+            if (config_1.config.maxCostUSD > 0 && spent >= config_1.config.maxCostUSD) {
+                console.warn(`[Cognitivo] Orcamento atingido: gasto≈$${spent.toFixed(4)} >= ` +
+                    `MAX_COST_USD=$${config_1.config.maxCostUSD}. Encerrando o loop apos ${i} iteracao(oes).`);
+                return {
+                    findings: this.dispatcher.getFindings(),
+                    steps,
+                    totalIterations: i,
+                    finishedCleanly: false,
+                    summary: `Orcamento de $${config_1.config.maxCostUSD} atingido apos ${i} iteracoes ` +
+                        `(gasto real≈$${spent.toFixed(4)}). Encerramento por budget stop; ` +
+                        `findings coletados ate aqui foram preservados. Run parcial.`,
+                    totalCostUSD: spent,
                 };
             }
             // 7. Adiciona a Observation ao histórico para a próxima iteração.
@@ -219,6 +242,7 @@ class ReActAgent {
             totalIterations: config_1.config.maxReactIterations,
             finishedCleanly: false,
             summary: `Limite de ${config_1.config.maxReactIterations} iterações atingido.`,
+            totalCostUSD: this.llm.totalCostUSD,
         };
     }
     // ===========================================================

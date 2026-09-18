@@ -70,6 +70,8 @@ class OpenRouterClient {
     apiKey;
     model;
     baseUrl;
+    _totalCostUSD = 0;
+    get totalCostUSD() { return this._totalCostUSD; }
     constructor() {
         this.apiKey = config_1.config.openrouterApiKey;
         this.model = config_1.config.openrouterModel;
@@ -146,10 +148,12 @@ class OpenRouterClient {
                     cacheWrite * config_1.config.llmPriceCacheWrite +
                     cacheRead * config_1.config.llmPriceCacheRead +
                     output * config_1.config.llmPriceOutput) / 1_000_000;
+                this._totalCostUSD += costUSD;
                 const cacheHit = inputTotal > 0 ? (cacheRead / inputTotal * 100).toFixed(0) : '0';
                 console.log(`  [LLM] input=${inputTotal} (cache_read=${cacheRead}/${cacheHit}%, ` +
                     `cache_write=${cacheWrite}, regular=${inputRegular}) ` +
-                    `output=${output} custo≈$${costUSD.toFixed(4)}`);
+                    `output=${output} custo≈$${costUSD.toFixed(4)} ` +
+                    `(acumulado≈$${this._totalCostUSD.toFixed(4)})`);
             }
             return content;
         }
@@ -170,6 +174,8 @@ class OpenRouterClient {
 class AnthropicClient {
     name;
     client;
+    _totalCostUSD = 0;
+    get totalCostUSD() { return this._totalCostUSD; }
     constructor() {
         this.client = new sdk_1.default({ apiKey: config_1.config.anthropicApiKey });
         this.name = `anthropic/${config_1.config.llmModel}`;
@@ -194,6 +200,23 @@ class AnthropicClient {
             ],
             messages: history,
         });
+        // Telemetria de custo (mesmas tarifas de config.llmPrice*), para o
+        // budget stop funcionar tambem via chamada direta a Anthropic.
+        const u = response.usage;
+        if (u) {
+            const cacheWrite = u.cache_creation_input_tokens ?? 0;
+            const cacheRead = u.cache_read_input_tokens ?? 0;
+            const inputReg = u.input_tokens ?? 0;
+            const output = u.output_tokens ?? 0;
+            const costUSD = (inputReg * config_1.config.llmPriceInput +
+                cacheWrite * config_1.config.llmPriceCacheWrite +
+                cacheRead * config_1.config.llmPriceCacheRead +
+                output * config_1.config.llmPriceOutput) / 1_000_000;
+            this._totalCostUSD += costUSD;
+            console.log(`  [LLM] input=${inputReg} (cache_read=${cacheRead}, cache_write=${cacheWrite}) ` +
+                `output=${output} custo≈$${costUSD.toFixed(4)} ` +
+                `(acumulado≈$${this._totalCostUSD.toFixed(4)})`);
+        }
         return response.content[0]?.type === 'text' ? response.content[0].text : '';
     }
 }
@@ -202,6 +225,8 @@ class AnthropicClient {
 // ===========================================================
 class OllamaClient {
     name;
+    /** LLM local — sem custo monetário; budget stop nunca dispara. */
+    totalCostUSD = 0;
     baseUrl;
     model;
     constructor() {
@@ -314,6 +339,8 @@ const CLI_ROLE_LOCK = [
 ].join('\n');
 class ClaudeCliClient {
     name;
+    /** Via assinatura (Claude Pro/Max) — sem custo por token medido aqui. */
+    totalCostUSD = 0;
     model;
     constructor() {
         this.model = config_1.config.llmModel;

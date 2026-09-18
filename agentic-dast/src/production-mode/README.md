@@ -257,7 +257,9 @@ O que esperar:
   bloqueados e o agente adapta a estratégia
 - Você não precisa ficar no terminal (nada vai ser perguntado, pois
   read-only bloqueia antes de chegar a pergunta)
-- Ao final, você vai ter um relatório em `reports/report-production-*.json`
+- Ao final, você vai ter **dois** relatórios em `reports/`:
+  `report-production-*.json` (bruto) e `report-production-*.md` (técnico
+  e legível — sumário, findings detalhados e o trace de raciocínio) —
   com findings que dependem apenas de leitura (exposição de dados,
   endpoints administrativos sem autenticação, JWT com validação
   inadequada em rotas GET)
@@ -369,7 +371,14 @@ Qualquer coisa diferente de `CONFIRMO` (case-sensitive) cancela a ação.
 | `HTTP_MAX_BODY_CHARS` | `1500` | Tamanho máx. do corpo de resposta em `make_request`/`page_fetch`. Default = histórico (baseline do TCC intacto). Em app real, eleve (ex.: `200000`) para o recon ler bundles JS |
 | `READ_PAGE_MAX_CHARS` | `2000` | Tamanho máx. do conteúdo em `read_page`. Eleve (ex.: `20000`) em produção |
 | `READ_PAGE_INCLUDE_SOURCE` | `false` | Se `true`, `read_page` inclui o HTML-fonte (`page.content`) além do `innerText` — necessário para achar `<script src>` de bundles (o `innerText` nunca traz `<script>`) |
-| `LLM_PRICE_INPUT` / `_OUTPUT` / `_CACHE_READ` / `_CACHE_WRITE` | deriva do modelo | Tarifas USD/MTok da telemetria de custo. Default: Kimi (0.71/3.21/0.18) quando `OPENROUTER_MODEL` casa moonshot/kimi, senão Haiku 4.5 (1.00/5.00/0.10). Só afeta o log de custo |
+| `LLM_PRICE_INPUT` / `_OUTPUT` / `_CACHE_READ` / `_CACHE_WRITE` | deriva do modelo | Tarifas USD/MTok da telemetria de custo. Default: Kimi (0.71/3.21/0.18) quando `OPENROUTER_MODEL` casa moonshot/kimi, senão Haiku 4.5 (1.00/5.00/0.10). Alimenta o log de custo **e** o critério de parada `MAX_COST_USD` |
+| `MAX_REACT_ITERATIONS` | `25` | Máximo de iterações do loop ReAct. Critério de parada por quantidade |
+| `MAX_COST_USD` | `0` | Orçamento de gasto (USD) do loop ReAct: encerra quando o custo do LLM ultrapassa esse valor (o que vier primeiro entre ele e `MAX_REACT_ITERATIONS`). `0` = desativado. Só com OpenRouter/Anthropic (Ollama/claude-cli têm custo 0) |
+| `INTERACTIVE_LOGIN` | `false` | Abre o Chromium visível para você logar manualmente (senha+MFA+SSO) e captura a sessão ao ENTER |
+| `SESSION_CACHE` | `true` | Salva a sessão do login manual **cifrada** em `.session-cache/` e reaproveita nas próximas rodadas se ainda válida (evita relogar a cada teste) |
+| `FORCE_REAUTH` | `false` | Ignora o cache e refaz o login manual, sobrescrevendo a sessão salva. Use ao trocar de usuário ou quando a sessão morreu |
+| `SESSION_PASSPHRASE` | vazio | Senha (scrypt) para cifrar a sessão salva. Vazio = chave derivada da máquina (protege contra leitura casual do disco, não contra atacante com a mesma conta) |
+| `SESSION_MAX_AGE_MIN` | `720` | Idade máx. (min) de uma sessão em cache antes de ser descartada sem testar. `0` = sem limite (só a verificação decide) |
 
 ### Receita para SPA autenticado (ex.: Auth0) — dois passes
 
@@ -442,8 +451,9 @@ timestamp_iso,iteration,action,method,url,risk_level,outcome
 | `quit-by-human` | Operador digitou `q` — sessão foi encerrada nesta iteração |
 | `blocked-readonly` | `READ_ONLY=true` bloqueou antes de perguntar |
 
-Esse CSV é o **registro forense** da sessão. Guarde junto com o relatório
-JSON gerado em `reports/report-production-*.json`. Se algo der ruim, você
+Esse CSV é o **registro forense** da sessão. Guarde junto com os relatórios
+gerados em `reports/`: `report-production-*.json` (bruto) e
+`report-production-*.md` (técnico/legível). Se algo der ruim, você
 tem prova do que foi (e do que não foi) enviado ao alvo.
 
 ---

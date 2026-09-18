@@ -72,6 +72,7 @@ const readline = __importStar(require("readline"));
 const config_1 = require("../config");
 const sameSite_1 = require("../util/sameSite");
 const TargetProfile_1 = require("./TargetProfile");
+const SessionStore_1 = require("./SessionStore");
 /** Limites do crawl para nao varrer o app inteiro. */
 const MAX_PAGES = parseInt(process.env.CRAWL_MAX_PAGES ?? '25', 10);
 const NAV_TIMEOUT_MS = 20_000;
@@ -92,6 +93,10 @@ class ProductionPerception {
     targetHost = safeHost(config_1.config.targetUrl);
     /** Perfil do alvo (TARGET_PROFILE), se fornecido. */
     profile;
+    /** Persistencia cifrada da sessao de browser entre execucoes. */
+    sessionStore = new SessionStore_1.SessionStore(config_1.config.sessionPassphrase);
+    /** Estado headless do browser atualmente aberto (null = nenhum). */
+    currentHeadless = null;
     constructor() {
         this.profile = (0, TargetProfile_1.loadTargetProfile)();
     }
@@ -107,6 +112,7 @@ class ProductionPerception {
     async close() {
         await this.browser?.close();
         this.browser = null;
+        this.currentHeadless = null;
         console.log('[Percepção/prod] Browser encerrado.');
     }
     async extract() {
@@ -177,9 +183,18 @@ class ProductionPerception {
     lastFinalUrl = '';
     lastTitle = '';
     async acquireSession() {
+        // 0. Tenta reaproveitar uma sessao salva (cifrada) de execucao
+        //    anterior. So se aplica ao fluxo de login interativo — MANUAL_JWT/
+        //    MANUAL_COOKIES ja "persistem" a sessao via env.
         if (config_1.config.interactiveLogin) {
+            const cachedAuth = await this.tryReuseCachedSession();
+            if (cachedAuth)
+                return cachedAuth;
             const session = await this.captureAfterManualLogin();
-            await this.reopenHeadlessWithSession(session);
+            const valid = await this.reopenHeadlessWithSession(session);
+            if (valid && config_1.config.sessionCache) {
+                this.saveSessionToCache(session);
+            }
             const jwt = this.extractJwtFromStorage(session.storage);
             return {
                 jwt,
@@ -216,6 +231,9 @@ class ProductionPerception {
      * localStorage + sessionStorage da origem final.
      */
     async captureAfterManualLogin() {
+        // Garante browser VISIVEL para o login manual. Se uma tentativa de
+        // reuso de cache falhou antes, o browser pode ter ficado headless.
+        await this.ensureBrowser(false);
         if (!this.browser)
             throw new Error('browser nao inicializado');
         const page = await this.browser.newPage();
@@ -262,32 +280,41 @@ class ProductionPerception {
         return { cookies, storage, finalUrl };
     }
     /**
-     * Fecha a janela visivel e reabre em headless, restaurando a sessao:
-     * cookies (com dominio/path originais, via CDP) e localStorage/
-     * sessionStorage (escritos na origem correta). Ao final, verifica se
-     * a sessao realmente sobreviveu (nao redirecionou de volta ao login).
+     * Fecha a janela visivel e reabre em headless, restaurando a sessao
+     * recem-capturada no login manual. Retorna `true` se a sessao
+     * sobreviveu (alvo carregou autenticado), `false` caso contrario.
      */
     async reopenHeadlessWithSession(session) {
         console.log('[Percepção/prod] Fechando janela visivel e reabrindo em headless...');
-        await this.browser?.close();
-        await this.launchInternal(true);
+        const restorable = session.cookies
+            .map(toCookieParam)
+            .filter((c) => c !== null);
+        return this.restoreAndVerify(restorable, session.storage);
+    }
+    /**
+     * Nucleo compartilhado: garante um browser headless, restaura cookies
+     * (via CDP) e localStorage/sessionStorage (na origem correta), e
+     * verifica se a sessao sobreviveu navegando ao alvo. Usado tanto pela
+     * captura fresca (login manual) quanto pelo reaproveitamento de sessao
+     * em cache. Retorna `true` sse o alvo carregou autenticado.
+     */
+    async restoreAndVerify(cookies, storage) {
+        await this.ensureBrowser(true);
         if (!this.browser)
             throw new Error('falha ao reabrir browser headless');
         const page = await this.browser.newPage();
         const cdp = await page.target().createCDPSession();
+        let authenticated = false;
         // 1. Restaura cookies preservando dominio/path/flags originais.
-        const restorable = session.cookies
-            .map(toCookieParam)
-            .filter((c) => c !== null);
-        if (restorable.length > 0) {
-            await cdp.send('Network.setCookies', { cookies: restorable });
-            console.log(`[Percepção/prod] ${restorable.length} cookie(s) restaurado(s).`);
+        if (cookies.length > 0) {
+            await cdp.send('Network.setCookies', { cookies });
+            console.log(`[Percepção/prod] ${cookies.length} cookie(s) restaurado(s).`);
         }
         // 2. Restaura storage na origem correta (precisa estar na origem
         //    para escrever no localStorage/sessionStorage).
-        const origin = session.storage.origin;
-        const hasStorage = Object.keys(session.storage.local).length > 0 ||
-            Object.keys(session.storage.session).length > 0;
+        const origin = storage.origin;
+        const hasStorage = Object.keys(storage.local).length > 0 ||
+            Object.keys(storage.session).length > 0;
         if (origin && hasStorage) {
             try {
                 await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
@@ -301,7 +328,7 @@ class ProductionPerception {
                     catch {
                         /* storage indisponivel nesta origem */
                     }
-                }, session.storage);
+                }, storage);
                 console.log(`[Percepção/prod] Storage restaurado na origem ${origin}.`);
             }
             catch (err) {
@@ -321,6 +348,7 @@ class ProductionPerception {
                     `esta em storage/cookie httpOnly de outra origem.`);
             }
             else {
+                authenticated = true;
                 console.log('[Percepção/prod] Sessao verificada: alvo carregou autenticado. ✓');
             }
         }
@@ -329,6 +357,78 @@ class ProductionPerception {
         }
         finally {
             await page.close();
+        }
+        return authenticated;
+    }
+    /**
+     * Tenta reaproveitar uma sessao salva (cifrada) de execucao anterior.
+     * Retorna o AuthContext pronto se a sessao ainda for valida (login
+     * manual dispensado), ou null para cair no fluxo normal de captura.
+     */
+    async tryReuseCachedSession() {
+        if (!config_1.config.sessionCache)
+            return null;
+        if (config_1.config.forceReauth) {
+            console.log('[Percepção/prod] FORCE_REAUTH=true — ignorando sessao em cache e ' +
+                'refazendo o login manual.');
+            return null;
+        }
+        const entry = this.sessionStore.load(this.targetHost);
+        if (!entry)
+            return null;
+        const ageMin = Math.round(entry.ageMinutes);
+        const maxAge = config_1.config.sessionMaxAgeMin;
+        if (maxAge > 0 && entry.ageMinutes > maxAge) {
+            console.log(`[Percepção/prod] Sessao em cache tem ${ageMin} min (> SESSION_MAX_AGE_MIN=` +
+                `${maxAge}) — considerada velha, descartando.`);
+            return null;
+        }
+        console.log(`[Percepção/prod] Sessao em cache encontrada (idade ${ageMin} min, ` +
+            `${entry.meta.encryptedWithPassphrase ? 'passphrase' : 'chave da maquina'}). ` +
+            `Verificando se ainda e valida...`);
+        const cookies = entry.session.cookies;
+        const valid = await this.restoreAndVerify(cookies, entry.session.storage);
+        if (!valid) {
+            console.log('[Percepção/prod] Sessao em cache invalida/expirada — sera necessario ' +
+                'reautenticar. Removendo cache antigo.');
+            this.sessionStore.clear(this.targetHost);
+            return null;
+        }
+        // Adota a sessao do cache como se tivesse sido capturada agora, para
+        // que o handoff ao Actor e o filtro de cookies por host funcionem.
+        this.lastCapturedCookies =
+            entry.session.cookies;
+        this.lastStorage = entry.session.storage;
+        this.lastFinalUrl = entry.session.finalUrl;
+        const jwt = this.extractJwtFromStorage(entry.session.storage);
+        console.log('[Percepção/prod] Sessao reutilizada do cache. ✓ (login manual dispensado)');
+        return {
+            jwt,
+            bearerToken: jwt,
+            cookies: {}, // preenchido em extract(), apos saber os hosts
+            userEmail: '(sessao em cache)',
+        };
+    }
+    /** Persiste (cifrada) a sessao recem-capturada para reuso futuro. */
+    saveSessionToCache(session) {
+        const restorable = session.cookies
+            .map(toCookieParam)
+            .filter((c) => c !== null);
+        const browserSession = {
+            cookies: restorable,
+            storage: session.storage,
+            finalUrl: session.finalUrl,
+        };
+        try {
+            this.sessionStore.save(this.targetHost, browserSession, this.targetUrl);
+            console.log(`[Percepção/prod] Sessao salva cifrada em .session-cache/ ` +
+                `(${this.sessionStore.usingPassphrase
+                    ? 'protegida por SESSION_PASSPHRASE'
+                    : 'chave derivada da maquina — defina SESSION_PASSPHRASE p/ endurecer'}). ` +
+                `Proxima run reaproveita sem novo login.`);
+        }
+        catch (err) {
+            console.warn(`[Percepção/prod] Falha ao salvar sessao em cache: ${err.message}`);
         }
     }
     async injectSimpleCookies(cookieDict) {
@@ -969,7 +1069,19 @@ class ProductionPerception {
             console.log(`[Percepção/prod] Usando proxy ZAP em ${config_1.config.zapProxyHost}:${config_1.config.zapProxyPort}`);
         }
         this.browser = await puppeteer_1.default.launch({ headless, args });
+        this.currentHeadless = headless;
         console.log(`[Percepção/prod] Browser iniciado (headless=${headless}).`);
+    }
+    /**
+     * Garante que ha um browser aberto no modo headless desejado. Se o
+     * browser atual estiver no modo errado (ou nao existir), fecha e reabre.
+     */
+    async ensureBrowser(headless) {
+        if (this.browser && this.currentHeadless === headless)
+            return;
+        await this.browser?.close();
+        this.browser = null;
+        await this.launchInternal(headless);
     }
     dedupeEndpoints(endpoints) {
         const seen = new Set();

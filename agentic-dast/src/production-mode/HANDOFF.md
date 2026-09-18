@@ -59,12 +59,18 @@ LLM_MODEL=claude-haiku-4-5-20251001
 TARGET_URL=https://alvo-autorizado.empresa.com
 BROWSER_BASE_URL=https://alvo-autorizado.empresa.com
 USE_ZAP_PROXY=false
-MAX_REACT_ITERATIONS=15
+MAX_REACT_ITERATIONS=25       # limite por iteracoes (o que vier primeiro)
+MAX_COST_USD=2.00             # limite por gasto em USD; 0 = desativado
 
 # Autenticacao no alvo (escolha UMA das linhas abaixo):
 INTERACTIVE_LOGIN=true               # abre browser, voce loga uma vez
 # MANUAL_JWT=eyJhbGciOi...           # ou cole o Bearer token
 # MANUAL_COOKIES=SESSIONID=abc; ...  # ou cole os cookies de sessao
+
+# Sessao salva entre execucoes (evita relogar a cada teste):
+SESSION_CACHE=true                   # salva a sessao CIFRADA e reaproveita
+SESSION_PASSPHRASE=troque-esta-senha # senha p/ cifrar (vazio = chave da maquina)
+# FORCE_REAUTH=true                  # ignora o cache e refaz o login
 EOF
 
 mkdir -p logs reports
@@ -82,6 +88,20 @@ causa do `INTERACTIVE_LOGIN=true`) e pedir que voce faca login
 manualmente. Depois de logada, volte ao terminal e pressione
 ENTER. O restante da rodada segue automatico com a sessao
 capturada.
+
+**Da segunda rodada em diante**, com `SESSION_CACHE=true`, o
+framework reaproveita a sessao salva (cifrada em `.session-cache/`)
+sem abrir o browser de login — desde que ela ainda seja valida (ele
+verifica navegando no alvo). Se expirou, ele avisa e refaz o login
+sozinho. Para forcar novo login (trocar de usuario, sessao morta),
+rode com `FORCE_REAUTH=true`.
+
+**Criterios de parada**: o loop encerra no que vier primeiro entre
+`MAX_REACT_ITERATIONS` (numero de iteracoes) e `MAX_COST_USD` (gasto
+em USD; `0` desativa). Ao final, dois relatorios sao gravados em
+`reports/`: `report-production-<ts>.json` (bruto) e
+`report-production-<ts>.md` (tecnico e legivel, com findings e o
+trace de raciocinio).
 
 > **Sobre `INTERACTIVE` vs `INTERACTIVE_LOGIN`**: sao coisas
 > diferentes. `INTERACTIVE=true` pede aprovacao humana `[y/n]`
@@ -224,6 +244,17 @@ menos tokens processados). Para 10 rodadas de avaliação inicial no
 CRM, orçar **US$ 10 em créditos** já cobre com folga. Custo pode ser
 compartilhado como despesa de projeto de segurança.
 
+**Teto de gasto por rodada (`MAX_COST_USD`)**: para não depender só do
+número de iterações, defina `MAX_COST_USD` (ex.: `2.00`). O agente
+encerra assim que o custo acumulado do LLM ultrapassa esse valor — o
+que vier primeiro entre ele e `MAX_REACT_ITERATIONS`. O custo é uma
+estimativa pelas tarifas do modelo (Kimi/Moonshot e Haiku já vêm
+calibrados; para outros modelos, fixe `LLM_PRICE_INPUT`,
+`LLM_PRICE_OUTPUT`, `LLM_PRICE_CACHE_READ`). Só tem efeito com
+OpenRouter/Anthropic (que medem custo); em `ollama`/`claude-cli` o
+custo é sempre 0 e o teto nunca dispara. O gasto real da rodada aparece
+no resumo do terminal e nos dois relatórios.
+
 ---
 
 ## Autenticação em alvos com MFA / SSO / CAPTCHA
@@ -352,6 +383,26 @@ Ao iniciar `npm run start:production`, o framework vai:
 - Você fica no laptop **apenas até apertar o ENTER**. Depois disso
   o browser fecha e a rodada continua totalmente headless — pode
   deixar o laptop de lado ou trabalhar em outra coisa.
+
+**Login uma vez só (`SESSION_CACHE`)**: com `SESSION_CACHE=true`
+(padrão), a sessão capturada no passo 4 é salva **cifrada**
+(AES-256-GCM) em `.session-cache/` — um arquivo por host-alvo, já no
+`.gitignore`. Nas rodadas seguintes o framework carrega essa sessão e a
+**verifica de verdade** (restaura headless e navega no alvo); se ainda
+estiver válida, **pula o login manual** e você nem vê o browser abrir.
+Se tiver expirado, ele descarta o cache, avisa e refaz o login sozinho.
+
+- `SESSION_PASSPHRASE=...` — senha que cifra a sessão. Vazio = chave
+  derivada da máquina (protege contra leitura casual do disco, não
+  contra quem tem acesso à mesma conta). Defina para endurecer; se
+  trocar a senha, o cache antigo vira ilegível e o login é refeito.
+- `FORCE_REAUTH=true` — ignora o cache e força novo login (use ao
+  trocar de usuário/permissão ou quando a sessão morreu sem a
+  verificação pegar), sobrescrevendo a sessão salva.
+- `SESSION_MAX_AGE_MIN=720` — idade máxima (min) da sessão antes de
+  ser descartada sem nem testar. `0` = sem limite de idade.
+- Nunca versione `.session-cache/` (é material de autenticação, mesmo
+  cifrado — já está ignorado).
 
 ### Opção 2 — JWT (Bearer token)
 
