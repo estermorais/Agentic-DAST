@@ -71,6 +71,59 @@ const SUSPICIOUS_PAYLOAD_PATTERNS = [
   /\.\.\/\.\.\//,                     // path traversal
 ];
 
+/**
+ * Paths cuja INTENÇÃO é leitura mesmo quando chamados via POST
+ * (busca/agregação/consulta com corpo grande). Um POST nesses paths, sem
+ * verbo de mutação no corpo, é tratado como leitura ('safe') — desbloqueia
+ * recon read-only de endpoints como /v2/segments/aggregation.
+ */
+const READ_INTENT_PATH_PATTERNS = [
+  /\/search\b/i, /\/query\b/i, /\/aggregations?\b/i, /\/aggregate\b/i,
+  /\/reports?\b/i, /\/facets?\b/i, /\/count\b/i, /\/preview\b/i,
+  /\/validate\b/i, /\/lookup\b/i, /\/autocomplete\b/i, /\/suggest\b/i,
+  /\/_search\b/i, /\/resolve\b/i,
+];
+
+/** Verbos claros de mutação no corpo — se presentes, NÃO é leitura. */
+const MUTATION_KEYWORD = /\b(create|update|delete|insert|remove|drop|mutation)\b/i;
+
+/**
+ * Detecta a operação GraphQL a partir da URL e do corpo. A operação é
+ * sinal autoritativo (não spoofável pelo path): 'mutation' modifica estado
+ * (high), 'query' é leitura (safe). Retorna null quando não é GraphQL
+ * reconhecível — cai na heurística normal de POST.
+ */
+function graphqlOperation(url: string, body: unknown): 'mutation' | 'query' | null {
+  let queryStr: string | null = null;
+  if (body && typeof body === 'object' && 'query' in (body as Record<string, unknown>)) {
+    const q = (body as Record<string, unknown>).query;
+    if (typeof q === 'string') queryStr = q;
+  } else if (typeof body === 'string') {
+    try {
+      const parsed = JSON.parse(body) as { query?: unknown };
+      if (typeof parsed.query === 'string') queryStr = parsed.query;
+    } catch {
+      /* corpo não é JSON — não dá para ler a operação */
+    }
+  }
+  if (queryStr === null) return null;
+  return /\b(mutation|subscription)\b/i.test(queryStr) ? 'mutation' : 'query';
+}
+
+/**
+ * Heurística conservadora: o clique é claramente navegacional (link, aba,
+ * paginação) e não parece submeter formulário nem confirmar ação? Só então
+ * rebaixa de 'medium' para 'safe'. Qualquer sinal de submit/save/delete/
+ * confirm mantém 'medium'.
+ */
+function isNavigationalClick(selector: string): boolean {
+  const s = (selector || '').toLowerCase();
+  if (/submit|salvar|\bsave\b|delete|excluir|remove|confirm|enviar|apply|aplicar|criar|create|update|atualizar/.test(s)) {
+    return false;
+  }
+  return /\[href|role=["']?link|\bnav\b|\btab\b|paginat|\bnext\b|\bprev\b|\bexpand\b|\btoggle\b|accordion|breadcrumb|(^|[\s,>~+])a[\s.#:[]/i.test(selector || '');
+}
+
 export interface ClassificationResult {
   level: RiskLevel;
   reason: string;
@@ -92,6 +145,12 @@ export function classifyActionRisk(action: ParsedAction): ClassificationResult {
       };
 
     case 'click_element':
+      if (isNavigationalClick(action.selector)) {
+        return {
+          level: 'safe',
+          reason: 'Clique navegacional (link/aba/paginação), não submete formulário.',
+        };
+      }
       return {
         level: 'medium',
         reason: 'Click pode disparar submit de formulário ou POST.',
@@ -169,8 +228,16 @@ function classifyRequest(
     };
   }
 
-  // POST em rota administrativa/usuarios
+  // POST: distingue mutação de leitura (GraphQL, rota admin, read-intent)
   if (method === 'POST') {
+    // GraphQL: a operação é sinal autoritativo, não o path.
+    const gql = graphqlOperation(url, action.body);
+    if (gql === 'mutation') {
+      return { level: 'high', reason: 'Mutation GraphQL modifica estado no servidor.' };
+    }
+
+    // POST em rota administrativa/usuarios (antes do downgrade de leitura,
+    // para uma query GraphQL a /admin permanecer high).
     for (const pattern of HIGH_PATH_PATTERNS) {
       if (pattern.test(url)) {
         return {
@@ -179,6 +246,20 @@ function classifyRequest(
         };
       }
     }
+
+    if (gql === 'query') {
+      return { level: 'safe', reason: 'Query GraphQL é apenas leitura.' };
+    }
+
+    // POST de intenção de leitura (busca/agregação/consulta) sem verbo de
+    // mutação no corpo → tratado como leitura, liberando recon read-only.
+    if (READ_INTENT_PATH_PATTERNS.some((p) => p.test(url)) && !MUTATION_KEYWORD.test(bodyStr)) {
+      return {
+        level: 'safe',
+        reason: 'POST de leitura (busca/agregação/consulta), sem verbo de mutação no corpo.',
+      };
+    }
+
     return {
       level: 'medium',
       reason: 'POST genérico pode criar recurso no servidor.',

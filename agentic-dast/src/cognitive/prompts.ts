@@ -871,8 +871,10 @@ export function buildInitialUserMessage(appMap: AppMap, opts?: InitialMessageOpt
             : 'nenhuma',
       jwtDisponivel: !!appMap.auth.jwt,
       // make_request já sai com Authorization: Bearer <token> injetado —
-      // o agente não precisa (nem consegue ver) o token.
-      bearerAutoInjetado: hasBearer,
+      // o agente não precisa (nem consegue ver) o token. Só incluímos o
+      // campo quando há Bearer, para o alvo do TCC (Juice Shop, sem Bearer)
+      // manter a mensagem inicial byte-a-byte idêntica ao baseline n=30.
+      ...(hasBearer ? { bearerAutoInjetado: true } : {}),
       jwtToken: appMap.auth.jwt ? `${appMap.auth.jwt.substring(0, 50)}...` : null,
       cookiesDisponiveis: cookieNames.length,
       cookieNames, // apenas nomes; valores nunca vao ao prompt
