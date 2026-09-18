@@ -229,6 +229,8 @@ class ReActAgent {
                     endpointsTested,
                     iteration: i,
                     maxIterations: config_1.config.maxReactIterations,
+                    costSpentUSD: this.llm.totalCostUSD,
+                    maxCostUSD: config_1.config.maxCostUSD,
                 });
             }
             this.conversationHistory.push({

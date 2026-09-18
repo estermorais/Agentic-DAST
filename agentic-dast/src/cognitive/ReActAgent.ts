@@ -323,6 +323,8 @@ export class ReActAgent {
           endpointsTested,
           iteration: i,
           maxIterations: config.maxReactIterations,
+          costSpentUSD: this.llm.totalCostUSD,
+          maxCostUSD: config.maxCostUSD,
         });
       }
 

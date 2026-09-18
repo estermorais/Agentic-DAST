@@ -135,6 +135,16 @@ export interface CoverageState {
   /** Iteração atual e limite, para o modelo dosar o tempo restante. */
   iteration: number;
   maxIterations: number;
+  /**
+   * Gasto real (USD) acumulado das chamadas ao LLM até agora nesta sessão.
+   * Opcional: ausente quando o provider não mede custo (Ollama/claude-cli)
+   * ou quando MAX_COST_USD=0 (sem teto de custo). Sem este dado, o modelo
+   * só vê iterações restantes — nunca deve inferir "orçamento em dólar
+   * curto" sem o número real.
+   */
+  costSpentUSD?: number;
+  /** Teto de custo (USD) da sessão (config.maxCostUSD). 0/ausente = sem teto. */
+  maxCostUSD?: number;
 }
 
 /**
@@ -154,6 +164,15 @@ const CANONICAL_CATEGORIES = [
  * uma Observation. Lembra o agente do que já cobriu, do que falta, e
  * de quanto orçamento resta — reforçando "cobertura antes de
  * profundidade" sem depender da memória do modelo.
+ *
+ * IMPORTANTE: a diretriz final (continuar vs. consolidar) é calculada a
+ * partir dos percentuais REAIS de orçamento restante (iterações e, quando
+ * disponível, custo em USD) — nunca uma sugestão genérica de "orçamento
+ * pode estar curto". Isso corrige um padrão observado em produção: o
+ * modelo via a palavra "orçamento" repetida no prompt sem nunca receber o
+ * número real de custo gasto/restante, e concluía "orçamento está curto"
+ * por analogia/vocabulário, encerrando a sessão (Action:finish) com boa
+ * margem de iterações E de custo ainda disponíveis.
  */
 export function buildCoverageNote(state: CoverageState): string {
   const withFindings = state.categoriesWithFindings.length
@@ -162,15 +181,38 @@ export function buildCoverageNote(state: CoverageState): string {
   const covered = new Set(state.categoriesWithFindings.map((c) => c.toUpperCase()));
   const untouched = CANONICAL_CATEGORIES.filter((c) => !covered.has(c));
   const iterationsLeft = Math.max(0, state.maxIterations - state.iteration);
+  const iterationsPct = state.maxIterations > 0
+    ? Math.round((iterationsLeft / state.maxIterations) * 100)
+    : 100;
+
+  let costLine = '';
+  let costPct: number | null = null;
+  if (state.maxCostUSD !== undefined && state.maxCostUSD > 0 && state.costSpentUSD !== undefined) {
+    const costLeft = Math.max(0, state.maxCostUSD - state.costSpentUSD);
+    costPct = Math.round((costLeft / state.maxCostUSD) * 100);
+    costLine =
+      `- Orçamento de custo: gasto real ≈$${state.costSpentUSD.toFixed(4)} de ` +
+      `$${state.maxCostUSD.toFixed(2)} (~${costPct}% restante)\n`;
+  }
+
+  // "Curto" = QUALQUER teto real (iterações ou custo) abaixo de 20%
+  // restante. Enquanto ambos estiverem confortáveis, a diretriz é
+  // explícita para NÃO encerrar cedo — o framework, não o modelo, decide
+  // o limiar, com os números reais à vista.
+  const budgetLow = iterationsPct < 20 || (costPct !== null && costPct < 20);
+  const guidance = budgetLow
+    ? 'Orçamento (iterações e/ou custo) abaixo de 20% restante — priorize consolidar os achados ' +
+      'e chame `finish` com summary honesto em breve.'
+    : 'Orçamento ainda confortável (iterações e custo acima de 20% restante) — NÃO encerre a ' +
+      'sessão agora; continue cobrindo as categorias sem evidência acima.';
 
   return (
     `\n\n---\n[ESTADO DE COBERTURA — memória do framework, não é resultado de ação]\n` +
     `- Requisições emitidas: ${state.endpointsTested}\n` +
     `- Categorias com finding: ${withFindings}\n` +
     `- Categorias ainda sem cobertura evidente: ${untouched.join(', ') || '(todas tocadas)'}\n` +
-    `- Iterações restantes: ~${iterationsLeft} de ${state.maxIterations}\n` +
-    `Priorize as categorias sem cobertura enquanto houver orçamento; evite repetir ` +
-    `testes idênticos. Se o orçamento estiver curto, consolide e chame \`finish\` com ` +
-    `summary honesto.`
+    `- Iterações restantes: ~${iterationsLeft} de ${state.maxIterations} (~${iterationsPct}% restante)\n` +
+    costLine +
+    `${guidance} Evite repetir testes idênticos.`
   );
 }
