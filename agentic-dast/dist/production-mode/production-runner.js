@@ -91,6 +91,29 @@ const report_render_1 = require("./report-render");
 /** Limite de caracteres do contexto da aplicacao anexado ao prompt. */
 const APP_CONTEXT_MAX_CHARS = parseEnvNumber('APP_CONTEXT_MAX_CHARS', 20_000);
 /**
+ * Trunca `text` para no maximo `max` caracteres, preferindo cortar numa
+ * fronteira de linha para nao partir uma frase (ou um par surrogate de um
+ * emoji/caractere multi-byte) no meio. Se nao houver quebra de linha na
+ * janela final (ate metade do limite), cai no corte direto. Retorna o
+ * texto inalterado quando ja cabe.
+ */
+function truncateAppContext(text, max) {
+    if (text.length <= max)
+        return text;
+    let hardCut = text.slice(0, max);
+    // Se o corte caiu no meio de um par surrogate (emoji/caractere multi-byte),
+    // descarta o high surrogate orfao para nao emitir um code unit invalido.
+    const lastCode = hardCut.charCodeAt(hardCut.length - 1);
+    if (lastCode >= 0xd800 && lastCode <= 0xdbff)
+        hardCut = hardCut.slice(0, -1);
+    const lastNl = hardCut.lastIndexOf('\n');
+    // So respeita a fronteira de linha se ela nao descartar mais da metade
+    // do conteudo permitido (evita perder quase tudo por causa de uma unica
+    // linha muito longa).
+    const cut = lastNl >= max / 2 ? hardCut.slice(0, lastNl) : hardCut;
+    return cut + '\n[...contexto truncado...]';
+}
+/**
  * Carrega o arquivo de contexto da aplicacao (APP_CONTEXT_FILE), se
  * definido. Falha graciosa: arquivo ausente/ilegivel apenas avisa e segue
  * sem contexto. Trunca com aviso se exceder o limite (protege a janela de
@@ -111,7 +134,7 @@ function loadAppContext() {
         if (text.length > APP_CONTEXT_MAX_CHARS) {
             console.warn(`[Config] Contexto da aplicacao tem ${text.length} chars (> ` +
                 `APP_CONTEXT_MAX_CHARS=${APP_CONTEXT_MAX_CHARS}) — truncando.`);
-            text = text.slice(0, APP_CONTEXT_MAX_CHARS) + '\n[...contexto truncado...]';
+            text = truncateAppContext(text, APP_CONTEXT_MAX_CHARS);
         }
         console.log(`[Config] Contexto da aplicacao carregado de "${resolved}" ` +
             `(${text.length} chars) — sera anexado ao prompt para reduzir falso-positivo.`);
