@@ -57,6 +57,12 @@ export interface RunOptions {
   passiveFindings?: boolean;
   /** Documenta as ações page_fetch/execute_js (app autenticado por sessão). */
   pageJs?: boolean;
+  /**
+   * Contexto da aplicação escrito pelo operador (APP_CONTEXT_FILE): ajuda
+   * o LLM a separar vulnerabilidade real de caso de uso legítimo. Anexado
+   * ao final do system prompt. Vazio/ausente = sem efeito.
+   */
+  appContext?: string;
 }
 
 /** Resultado final da sessão de testes */
@@ -92,6 +98,7 @@ export class ReActAgent {
       fewShot: opts?.fewShot,
       passiveFindings: opts?.passiveFindings,
       pageJs: opts?.pageJs,
+      appContext: opts?.appContext,
     });
     console.log('\n[Cognitivo] Iniciando loop ReAct...');
     console.log(`[Cognitivo] LLM: ${this.llm.name}`);

@@ -57,6 +57,49 @@ import { summaryClaimsVulnerabilities } from '../cognitive/ReActAgent';
 import { prioritizeAppMap, rankEndpoints } from './SurfacePrioritizer';
 import { renderMarkdownReport, ProductionReport } from './report-render';
 
+/** Limite de caracteres do contexto da aplicacao anexado ao prompt. */
+const APP_CONTEXT_MAX_CHARS = parseEnvNumber('APP_CONTEXT_MAX_CHARS', 20_000);
+
+/**
+ * Carrega o arquivo de contexto da aplicacao (APP_CONTEXT_FILE), se
+ * definido. Falha graciosa: arquivo ausente/ilegivel apenas avisa e segue
+ * sem contexto. Trunca com aviso se exceder o limite (protege a janela de
+ * contexto do LLM).
+ */
+function loadAppContext(): string {
+  const p = config.appContextFile;
+  if (!p) return '';
+  const resolved = path.isAbsolute(p) ? p : path.resolve(process.cwd(), p);
+  if (!fs.existsSync(resolved)) {
+    console.warn(
+      `[Config] APP_CONTEXT_FILE aponta para "${resolved}", que nao existe. ` +
+      `Rodando sem contexto da aplicacao.`,
+    );
+    return '';
+  }
+  try {
+    let text = fs.readFileSync(resolved, 'utf-8');
+    if (text.length > APP_CONTEXT_MAX_CHARS) {
+      console.warn(
+        `[Config] Contexto da aplicacao tem ${text.length} chars (> ` +
+        `APP_CONTEXT_MAX_CHARS=${APP_CONTEXT_MAX_CHARS}) — truncando.`,
+      );
+      text = text.slice(0, APP_CONTEXT_MAX_CHARS) + '\n[...contexto truncado...]';
+    }
+    console.log(
+      `[Config] Contexto da aplicacao carregado de "${resolved}" ` +
+      `(${text.length} chars) — sera anexado ao prompt para reduzir falso-positivo.`,
+    );
+    return text;
+  } catch (err) {
+    console.warn(
+      `[Config] Falha ao ler APP_CONTEXT_FILE ("${resolved}"): ` +
+      `${(err as Error).message}. Rodando sem contexto da aplicacao.`,
+    );
+    return '';
+  }
+}
+
 /** Rotulo do modelo LLM ativo, para o relatorio. */
 function llmLabel(): string {
   switch (config.llmProvider) {
@@ -101,7 +144,12 @@ async function main(): Promise<void> {
     ? '$' + config.maxCostUSD : '(desativado — só limita por iterações)'}`);
   console.log(`  SESSION_CACHE    : ${config.sessionCache}${
     config.forceReauth ? ' (FORCE_REAUTH=true — vai reautenticar)' : ''}`);
+  console.log(`  APP_CONTEXT_FILE : ${config.appContextFile || '(nenhum)'}`);
   console.log(`  Alvo (targetUrl) : ${config.targetUrl}\n`);
+
+  // Contexto da aplicacao (opcional): anexado ao system prompt para o LLM
+  // separar vulnerabilidade real de caso de uso legitimo.
+  const appContext = loadAppContext();
 
   if (!readOnly && !interactive) {
     console.warn(
@@ -198,6 +246,9 @@ async function main(): Promise<void> {
       // Ações page_fetch/execute_js para app autenticado por sessão de
       // browser (SPA/Auth0 com token em memória). Opt-in: USE_PAGE_JS=true.
       pageJs: process.env.USE_PAGE_JS === 'true',
+      // Contexto da aplicação (APP_CONTEXT_FILE): reduz falso-positivo
+      // ajudando o LLM a distinguir vuln real de caso de uso legítimo.
+      appContext,
       // Gestão de contexto ligada em produção: sessões contra apps reais
       // são longas e as respostas grandes. Trunca Observations, compacta
       // histórico antigo e injeta memória de cobertura a cada 5 iterações.

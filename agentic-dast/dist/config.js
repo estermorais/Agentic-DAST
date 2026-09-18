@@ -193,6 +193,13 @@ exports.config = {
     //   efeito com providers que medem custo (OpenRouter, Anthropic); em
     //   Ollama/claude-cli o custo e sempre 0 e este limite nunca dispara.
     maxCostUSD: parseFloat(optional('MAX_COST_USD', '0')),
+    // APP_CONTEXT_FILE: caminho para um arquivo (texto/Markdown) que descreve
+    //   o contexto da aplicacao-alvo — papeis/permissoes, o que e dado
+    //   publico por design, fluxos esperados etc. E anexado ao system prompt
+    //   para o LLM distinguir vulnerabilidade real de caso de uso legitimo
+    //   (reduz falso-positivo). Vazio = sem contexto extra. So tem efeito no
+    //   modo producao.
+    appContextFile: optional('APP_CONTEXT_FILE', ''),
     useZapProxy: _useZapProxy,
     // ── Caps de tamanho de corpo nas Observations ──────────────
     // Defaults IDENTICOS ao comportamento historico: sem estas envs, as

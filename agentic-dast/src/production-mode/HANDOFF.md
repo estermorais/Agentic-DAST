@@ -71,6 +71,10 @@ INTERACTIVE_LOGIN=true               # abre browser, voce loga uma vez
 SESSION_CACHE=true                   # salva a sessao CIFRADA e reaproveita
 SESSION_PASSPHRASE=troque-esta-senha # senha p/ cifrar (vazio = chave da maquina)
 # FORCE_REAUTH=true                  # ignora o cache e refaz o login
+
+# Contexto da aplicacao (opcional): ajuda o LLM a nao confundir caso de
+# uso legitimo com vulnerabilidade (ver secao "Contexto da aplicacao").
+# APP_CONTEXT_FILE=./contexto-crm.md
 EOF
 
 mkdir -p logs reports
@@ -586,6 +590,51 @@ Variáveis relacionadas:
 > embutidos nesses campos (exemplos de query na `url`, papéis no `title`) e
 > o restante fica guardado no AppMap para relatório. Levar o perfil inteiro
 > ao LLM exigiria estender o prompt do núcleo — decisão à parte.
+
+---
+
+## Contexto da aplicação — reduzindo falso-positivo (opcional, recomendado)
+
+Diferente do `TARGET_PROFILE` (que descreve rotas/escopo TÉCNICO), o
+`APP_CONTEXT_FILE` descreve o NEGÓCIO por trás do alvo: papéis e
+permissões, o que é dado público por design, fluxos que parecem
+suspeitos mas são esperados. Sem isso, o LLM às vezes marca como
+"Broken Access Control" algo que é simplesmente a regra de negócio
+(ex.: "todo gestor de conta vê os dados de todos os clientes da sua
+carteira" não é IDOR se for assim que a feature foi desenhada).
+
+**Como usar:**
+
+1. Copie o exemplo e preencha com informações reais do seu alvo:
+   ```bash
+   cp src/production-mode/app-context.example.md ./contexto-alvo.md
+   # edite contexto-alvo.md com papéis, dados públicos, fluxos esperados
+   ```
+2. Aponte a variável no `.env`:
+   ```env
+   APP_CONTEXT_FILE=./contexto-alvo.md
+   ```
+3. Rode normalmente. O terminal confirma o carregamento:
+   ```
+   [Config] Contexto da aplicacao carregado de "./contexto-alvo.md"
+   (1234 chars) — sera anexado ao prompt para reduzir falso-positivo.
+   ```
+
+**O que NÃO muda:** o texto é tratado como informação de negócio, não
+como "seguro por decreto" — se o comportamento descrito como esperado
+for, na prática, uma falha (ex.: "qualquer usuário lê dados de qualquer
+conta" documentado como normal), o agente ainda deve reportar isso como
+finding, apontando o conflito. A regra 3a (proibição de alucinação,
+evidência obrigatória) continua valendo integralmente; o contexto só
+ajuda a calibrar julgamento, não substitui teste real.
+
+**Limites:**
+- `APP_CONTEXT_MAX_CHARS` (default 20000) trunca o arquivo se for
+  grande demais, para não estourar a janela de contexto do LLM.
+- Arquivo ausente ou ilegível apenas gera um aviso no terminal — a
+  rodada continua normalmente, sem o contexto extra.
+- Só tem efeito no modo produção (`production-runner.ts`); o
+  entrypoint oficial do TCC (`src/index.ts`) não é afetado.
 
 ---
 

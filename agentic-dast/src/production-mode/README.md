@@ -379,6 +379,8 @@ Qualquer coisa diferente de `CONFIRMO` (case-sensitive) cancela a ação.
 | `FORCE_REAUTH` | `false` | Ignora o cache e refaz o login manual, sobrescrevendo a sessão salva. Use ao trocar de usuário ou quando a sessão morreu |
 | `SESSION_PASSPHRASE` | vazio | Senha (scrypt) para cifrar a sessão salva. Vazio = chave derivada da máquina (protege contra leitura casual do disco, não contra atacante com a mesma conta) |
 | `SESSION_MAX_AGE_MIN` | `720` | Idade máx. (min) de uma sessão em cache antes de ser descartada sem testar. `0` = sem limite (só a verificação decide) |
+| `APP_CONTEXT_FILE` | vazio | Caminho para um arquivo texto/Markdown descrevendo o negócio do alvo (papéis, dados públicos por design, fluxos esperados) — anexado ao system prompt para reduzir falso-positivo. Exemplo em `app-context.example.md`. Vazio = sem efeito |
+| `APP_CONTEXT_MAX_CHARS` | `20000` | Trunca o arquivo acima se exceder esse tamanho, para não estourar a janela de contexto do LLM |
 
 ### Receita para SPA autenticado (ex.: Auth0) — dois passes
 

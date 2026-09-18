@@ -41,6 +41,7 @@ class ReActAgent {
             fewShot: opts?.fewShot,
             passiveFindings: opts?.passiveFindings,
             pageJs: opts?.pageJs,
+            appContext: opts?.appContext,
         });
         console.log('\n[Cognitivo] Iniciando loop ReAct...');
         console.log(`[Cognitivo] LLM: ${this.llm.name}`);
