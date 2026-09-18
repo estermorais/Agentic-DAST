@@ -99,6 +99,26 @@ export function classifyActionRisk(action: ParsedAction): ClassificationResult {
 
     case 'make_request':
       return classifyRequest(action);
+
+    case 'page_fetch':
+      // Mesma heurística de método/URL/payload de make_request: um
+      // page_fetch GET de leitura é 'safe'; POST/métodos destrutivos e
+      // rotas sensíveis sobem de nível igual a uma requisição normal.
+      return classifyRequest({
+        action: 'make_request',
+        method: action.method ?? 'GET',
+        url: action.url,
+        headers: action.headers,
+        body: action.body,
+      });
+
+    case 'execute_js':
+      // Executa JS arbitrário na página autenticada — sempre exige
+      // aprovação humana (bloqueado em READ_ONLY, que só deixa passar 'safe').
+      return {
+        level: 'high',
+        reason: 'Executa JavaScript arbitrário no contexto da página autenticada.',
+      };
   }
 }
 

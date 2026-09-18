@@ -39,6 +39,14 @@ export type ParsedAction =
     }
   | { action: 'extract_tokens' }
   | {
+      action: 'page_fetch';
+      method?: string;
+      url: string;
+      headers?: Record<string, string>;
+      body?: unknown;
+    }
+  | { action: 'execute_js'; script: string }
+  | {
       action: 'report_finding';
       title: string;
       severity: string;
@@ -131,6 +139,17 @@ export class ActionDispatcher {
           action.headers,
           action.body,
         );
+
+      case 'page_fetch':
+        return await browser.pageFetch(
+          action.method ?? 'GET',
+          action.url,
+          action.headers,
+          action.body,
+        );
+
+      case 'execute_js':
+        return await browser.executeJs(action.script);
 
       case 'report_finding': {
         const finding: Finding = {

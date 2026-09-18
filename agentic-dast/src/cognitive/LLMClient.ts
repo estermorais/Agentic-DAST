@@ -123,12 +123,10 @@ class OpenRouterClient implements LLMClient {
       }
 
       // Telemetria de custo por chamada — instrumentacao para diagnosticar
-      // se o prompt caching esta funcionando via OpenRouter. Precos de
-      // referencia (anthropic/claude-haiku-4.5 no OpenRouter, USD/MTok):
-      //   input regular : 1.00
-      //   cache write   : 1.25 (default_write nao vem explicito na resposta)
-      //   cache read    : 0.10 (~90% de desconto sobre input regular)
-      //   output        : 5.00
+      // se o prompt caching esta funcionando via OpenRouter. As tarifas
+      // (USD/MTok) vem de config.llmPrice*, cujo default deriva do modelo:
+      // Kimi (Moonshot) 0.71/3.21/0.18 ou Haiku 4.5 1.00/5.00/0.10. Antes
+      // estavam chumbadas em Haiku, superestimando o custo de outros modelos.
       const usage = response.data?.usage;
       if (usage) {
         const inputTotal   = usage.prompt_tokens ?? 0;
@@ -137,7 +135,10 @@ class OpenRouterClient implements LLMClient {
         const inputRegular = Math.max(0, inputTotal - cacheRead - cacheWrite);
         const output       = usage.completion_tokens ?? 0;
         const costUSD =
-          (inputRegular * 1.00 + cacheWrite * 1.25 + cacheRead * 0.10 + output * 5.00) / 1_000_000;
+          (inputRegular * config.llmPriceInput +
+           cacheWrite   * config.llmPriceCacheWrite +
+           cacheRead    * config.llmPriceCacheRead +
+           output       * config.llmPriceOutput) / 1_000_000;
 
         const cacheHit = inputTotal > 0 ? (cacheRead / inputTotal * 100).toFixed(0) : '0';
         console.log(

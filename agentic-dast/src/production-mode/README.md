@@ -364,6 +364,42 @@ Qualquer coisa diferente de `CONFIRMO` (case-sensitive) cancela a ação.
 | `PROD_HISTORY_BUDGET` | `60000` | Orçamento de caracteres do histórico; acima disso, Observations antigas são elididas. `0` desativa |
 | `PROD_RECENT_TURNS` | `8` | Quantas mensagens finais preservar verbatim na compactação |
 | `PROD_COVERAGE_EVERY` | `5` | A cada quantas iterações injetar a nota de cobertura (categorias testadas, faltantes, orçamento). `0` desativa |
+| `REPORT_PASSIVE` | `true` (em prod) | Autoriza/obriga reportar achados **passivos** (headers/config/CORS/cookies/info-disclosure) com evidência de header. Ligado por padrão em produção e **sempre** em READ_ONLY. `REPORT_PASSIVE=false` desliga |
+| `USE_PAGE_JS` | `false` | Se `true`, expõe as ações `page_fetch` e `execute_js` (rodam fetch/JS **dentro da página autenticada**). Essencial para SPA/Auth0 com token em memória, onde `make_request` sai anônimo |
+| `HTTP_MAX_BODY_CHARS` | `1500` | Tamanho máx. do corpo de resposta em `make_request`/`page_fetch`. Default = histórico (baseline do TCC intacto). Em app real, eleve (ex.: `200000`) para o recon ler bundles JS |
+| `READ_PAGE_MAX_CHARS` | `2000` | Tamanho máx. do conteúdo em `read_page`. Eleve (ex.: `20000`) em produção |
+| `READ_PAGE_INCLUDE_SOURCE` | `false` | Se `true`, `read_page` inclui o HTML-fonte (`page.content`) além do `innerText` — necessário para achar `<script src>` de bundles (o `innerText` nunca traz `<script>`) |
+| `LLM_PRICE_INPUT` / `_OUTPUT` / `_CACHE_READ` / `_CACHE_WRITE` | deriva do modelo | Tarifas USD/MTok da telemetria de custo. Default: Kimi (0.71/3.21/0.18) quando `OPENROUTER_MODEL` casa moonshot/kimi, senão Haiku 4.5 (1.00/5.00/0.10). Só afeta o log de custo |
+
+### Receita para SPA autenticado (ex.: Auth0) — dois passes
+
+Aprendizado do run contra `app.dito.com.br` (SPA Auth0, token em memória):
+`READ_ONLY` sozinho **estruturalmente** só produz achados passivos, e sem
+`USE_PAGE_JS` a API autenticada é inalcançável. Rode em dois passes:
+
+**Pass 1 — recon + passivos (baixo risco):**
+```
+READ_ONLY=true INTERACTIVE=false SKIP_ABUSE_CASES=true \
+LLM_TEMPERATURE=0.2 REPORT_PASSIVE=true \
+HTTP_MAX_BODY_CHARS=200000 READ_PAGE_MAX_CHARS=20000 READ_PAGE_INCLUDE_SOURCE=true \
+AUDIT_LOG=./logs/prod-recon.csv npm run start:production
+```
+Sai com achados de headers/CSP/CORS/cookies/config e um AppMap real (agora
+lê bundles JS). O `AUDIT_LOG` mostra em `blocked-readonly` os write-paths que
+ficaram na mesa.
+
+**Pass 2 — exploração com humano no loop (é aqui que saem os findings ativos):**
+```
+READ_ONLY=false INTERACTIVE=true SKIP_ABUSE_CASES=true \
+LLM_TEMPERATURE=0.2 USE_PAGE_JS=true \
+HTTP_MAX_BODY_CHARS=200000 READ_PAGE_INCLUDE_SOURCE=true \
+CIRCUIT_BREAKER=5 RATE_LIMIT_MS=1000 AUDIT_LOG=./logs/prod-exploit.csv \
+npm run start:production
+```
+Você aprova cada submit/POST; `USE_PAGE_JS` deixa o agente usar o token
+Auth0 em memória via `page_fetch`/`execute_js` para exercitar a API
+autenticada (IDOR/BOLA/Mass Assignment). CRITICAL (billing/webhook/mensagens)
+continua com dupla confirmação.
 
 ### Combinações mais comuns
 

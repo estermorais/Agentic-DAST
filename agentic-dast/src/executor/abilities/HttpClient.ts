@@ -127,11 +127,12 @@ export class HttpClient {
     try {
       const response = await axios(axiosConfig);
 
+      const bodyCap = config.httpMaxBodyChars;
       const bodyStr = typeof response.data === 'object'
-        ? JSON.stringify(response.data, null, 2).substring(0, 1500)
-        : String(response.data).substring(0, 1500);
+        ? JSON.stringify(response.data, null, 2).substring(0, bodyCap)
+        : String(response.data).substring(0, bodyCap);
 
-      const truncationNote = JSON.stringify(response.data).length > 1500
+      const truncationNote = JSON.stringify(response.data).length > bodyCap
         ? '\n[... resposta truncada]'
         : '';
 

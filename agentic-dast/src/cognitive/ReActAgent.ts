@@ -53,6 +53,10 @@ export interface RunOptions {
   contextManagement?: ContextManagementOptions;
   /** Anexa exemplos few-shot ao system prompt (reduz alucinação). */
   fewShot?: boolean;
+  /** Autoriza/obriga reportar achados passivos (headers/config/disclosure). */
+  passiveFindings?: boolean;
+  /** Documenta as ações page_fetch/execute_js (app autenticado por sessão). */
+  pageJs?: boolean;
 }
 
 /** Resultado final da sessão de testes */
@@ -82,7 +86,11 @@ export class ReActAgent {
     const ctxOpts = opts?.contextManagement;
     // System prompt estático da sessão (com ou sem few-shot). Sem opts,
     // é idêntico byte-a-byte ao SYSTEM_PROMPT do baseline do TCC.
-    const systemPrompt = buildSystemPrompt({ fewShot: opts?.fewShot });
+    const systemPrompt = buildSystemPrompt({
+      fewShot: opts?.fewShot,
+      passiveFindings: opts?.passiveFindings,
+      pageJs: opts?.pageJs,
+    });
     console.log('\n[Cognitivo] Iniciando loop ReAct...');
     console.log(`[Cognitivo] LLM: ${this.llm.name}`);
     console.log(`[Cognitivo] Máximo de iterações: ${config.maxReactIterations}\n`);

@@ -160,6 +160,14 @@ async function main(): Promise<void> {
       // (achado legítimo + sessão inconclusiva honesta) ao system prompt,
       // para reduzir alucinação. Default off.
       fewShot: process.env.USE_FEWSHOT === 'true',
+      // Achados passivos (headers/config/CORS/cookies/disclosure) são
+      // reportáveis com evidência de header. Ligado por padrão em produção
+      // e SEMPRE em READ_ONLY (cuja saída primária são achados passivos).
+      // Desligue com REPORT_PASSIVE=false.
+      passiveFindings: readOnly || process.env.REPORT_PASSIVE !== 'false',
+      // Ações page_fetch/execute_js para app autenticado por sessão de
+      // browser (SPA/Auth0 com token em memória). Opt-in: USE_PAGE_JS=true.
+      pageJs: process.env.USE_PAGE_JS === 'true',
       // Gestão de contexto ligada em produção: sessões contra apps reais
       // são longas e as respostas grandes. Trunca Observations, compacta
       // histórico antigo e injeta memória de cobertura a cada 5 iterações.
