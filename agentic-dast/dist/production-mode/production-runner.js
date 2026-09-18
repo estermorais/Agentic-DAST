@@ -72,6 +72,7 @@ const ZapClient_1 = require("../auditor/ZapClient");
 const config_1 = require("../config");
 const SafeDispatcher_1 = require("./SafeDispatcher");
 const ReActAgent_2 = require("../cognitive/ReActAgent");
+const SurfacePrioritizer_1 = require("./SurfacePrioritizer");
 function parseEnvBool(name, defaultValue) {
     const v = process.env[name];
     if (v === undefined)
@@ -150,7 +151,46 @@ async function main() {
         // dispatch() e getFindings(), ambos presentes no SafeDispatcher.
         console.log('[ FASE 3 ] Cognição — executando loop ReAct...\n');
         const agent = new ReActAgent_1.ReActAgent(safeDispatcher);
-        const result = await agent.run(appMap);
+        // Priorização da superfície de ataque (só no caminho de produção).
+        // Em app real a Percepção descobre centenas de endpoints; o resumo
+        // enviado ao LLM lista apenas os primeiros N. Reordenamos por RISCO
+        // para que os N que sobrevivem ao corte sejam os mais promissores,
+        // e elevamos N (PROD_MAX_ENDPOINTS, default 80). Nada é descartado —
+        // só a ordem muda. O baseline do TCC (src/index.ts) não passa por aqui.
+        const prioritizedAppMap = (0, SurfacePrioritizer_1.prioritizeAppMap)(appMap);
+        const maxEndpoints = parseInt(process.env.PROD_MAX_ENDPOINTS ?? '80', 10);
+        if (process.env.PROD_LOG_PRIORITIZATION === 'true') {
+            const top = (0, SurfacePrioritizer_1.rankEndpoints)(appMap.apiEndpoints).slice(0, 10);
+            console.log('[Priorização] Top endpoints por risco:');
+            top.forEach((r, i) => console.log(`  ${String(i + 1).padStart(2)}. [score ${r.score}] ${r.endpoint.method} ` +
+                `${r.endpoint.url}  (${r.reasons.join('; ')})`));
+            console.log('');
+        }
+        const result = await agent.run(prioritizedAppMap, {
+            initialMessage: { maxEndpoints, prioritized: true },
+            // Few-shot opt-in (USE_FEWSHOT=true): anexa 2 exemplos ilustrativos
+            // (achado legítimo + sessão inconclusiva honesta) ao system prompt,
+            // para reduzir alucinação. Default off.
+            fewShot: process.env.USE_FEWSHOT === 'true',
+            // Achados passivos (headers/config/CORS/cookies/disclosure) são
+            // reportáveis com evidência de header. Ligado por padrão em produção
+            // e SEMPRE em READ_ONLY (cuja saída primária são achados passivos).
+            // Desligue com REPORT_PASSIVE=false.
+            passiveFindings: readOnly || process.env.REPORT_PASSIVE !== 'false',
+            // Ações page_fetch/execute_js para app autenticado por sessão de
+            // browser (SPA/Auth0 com token em memória). Opt-in: USE_PAGE_JS=true.
+            pageJs: process.env.USE_PAGE_JS === 'true',
+            // Gestão de contexto ligada em produção: sessões contra apps reais
+            // são longas e as respostas grandes. Trunca Observations, compacta
+            // histórico antigo e injeta memória de cobertura a cada 5 iterações.
+            // Ajustável por env (defaults do ContextManager se não definido).
+            contextManagement: {
+                maxObservationChars: parseInt(process.env.PROD_MAX_OBS_CHARS ?? '4000', 10),
+                historyCharBudget: parseInt(process.env.PROD_HISTORY_BUDGET ?? '60000', 10),
+                recentTurnsVerbatim: parseInt(process.env.PROD_RECENT_TURNS ?? '8', 10),
+                coverageEveryNIters: parseInt(process.env.PROD_COVERAGE_EVERY ?? '5', 10),
+            },
+        });
         // Fase 3b: Abuse Cases (rodam via HttpClient direto, NAO passam pelo
         // SafeDispatcher). Em modo produção autorizado, o operador humano deve
         // desativar essa fase se quiser controle absoluto sobre cada request.

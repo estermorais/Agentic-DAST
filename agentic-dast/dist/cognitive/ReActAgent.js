@@ -18,6 +18,7 @@ exports.ReActAgent = void 0;
 exports.summaryClaimsVulnerabilities = summaryClaimsVulnerabilities;
 const config_1 = require("../config");
 const prompts_1 = require("./prompts");
+const ContextManager_1 = require("./ContextManager");
 const LLMClient_1 = require("./LLMClient");
 const HttpClient_1 = require("../executor/abilities/HttpClient");
 class ReActAgent {
@@ -32,13 +33,21 @@ class ReActAgent {
      * Executa o loop ReAct completo dado um AppMap.
      * Retorna todas as vulnerabilidades encontradas e os passos tomados.
      */
-    async run(appMap) {
+    async run(appMap, opts) {
+        const ctxOpts = opts?.contextManagement;
+        // System prompt estático da sessão (com ou sem few-shot). Sem opts,
+        // é idêntico byte-a-byte ao SYSTEM_PROMPT do baseline do TCC.
+        const systemPrompt = (0, prompts_1.buildSystemPrompt)({
+            fewShot: opts?.fewShot,
+            passiveFindings: opts?.passiveFindings,
+            pageJs: opts?.pageJs,
+        });
         console.log('\n[Cognitivo] Iniciando loop ReAct...');
         console.log(`[Cognitivo] LLM: ${this.llm.name}`);
         console.log(`[Cognitivo] Máximo de iterações: ${config_1.config.maxReactIterations}\n`);
         const steps = [];
         // Primeira mensagem: o AppMap para o LLM analisar
-        const initialMessage = (0, prompts_1.buildInitialUserMessage)(appMap);
+        const initialMessage = (0, prompts_1.buildInitialUserMessage)(appMap, opts?.initialMessage);
         this.conversationHistory.push({
             role: 'user',
             content: initialMessage,
@@ -53,8 +62,15 @@ class ReActAgent {
         let consecutiveParseFailures = 0;
         for (let i = 1; i <= config_1.config.maxReactIterations; i++) {
             console.log(`\n[Cognitivo] ── Iteração ${i}/${config_1.config.maxReactIterations} ──`);
+            // 0. Gestão de contexto (produção apenas): compacta Observations
+            // antigas quando o histórico excede o orçamento, preservando o
+            // AppMap inicial e os turnos recentes. Os steps[] mantêm o texto
+            // completo, então o relatório/evidência não é afetado.
+            if (ctxOpts) {
+                this.conversationHistory = (0, ContextManager_1.compactHistory)(this.conversationHistory, ctxOpts);
+            }
             // 1. Chama o LLM (Anthropic ou Ollama, transparente para o loop)
-            const rawText = await this.llm.chat(prompts_1.SYSTEM_PROMPT, this.conversationHistory);
+            const rawText = await this.llm.chat(systemPrompt, this.conversationHistory);
             console.log('[Cognitivo] LLM respondeu:\n', rawText.substring(0, 300), '...');
             // 2. Salva a resposta do assistente no histórico
             this.conversationHistory.push({
@@ -171,10 +187,29 @@ class ReActAgent {
                         `queda foram preservados. Marque este run como parcial no analise.`,
                 };
             }
-            // 7. Adiciona a Observation ao histórico para a próxima iteração
+            // 7. Adiciona a Observation ao histórico para a próxima iteração.
+            // Em produção (ctxOpts): trunca Observations grandes ao guardar
+            // (o texto completo permanece em steps[]) e injeta periodicamente
+            // uma nota de cobertura para reforçar breadth e reduzir repetição.
+            let observationForHistory = observation;
+            if (ctxOpts?.maxObservationChars) {
+                observationForHistory = (0, ContextManager_1.truncateObservation)(observation, ctxOpts.maxObservationChars);
+            }
+            let observationMessage = (0, prompts_1.buildObservationMessage)(observationForHistory);
+            const coverageCadence = ctxOpts?.coverageEveryNIters ?? 0;
+            if (coverageCadence > 0 && i % coverageCadence === 0) {
+                const categoriesWithFindings = Array.from(new Set(this.dispatcher.getFindings().map((f) => f.category).filter(Boolean)));
+                const endpointsTested = steps.filter((s) => s.action.action === 'make_request').length;
+                observationMessage += (0, ContextManager_1.buildCoverageNote)({
+                    categoriesWithFindings,
+                    endpointsTested,
+                    iteration: i,
+                    maxIterations: config_1.config.maxReactIterations,
+                });
+            }
             this.conversationHistory.push({
                 role: 'user',
-                content: (0, prompts_1.buildObservationMessage)(observation),
+                content: observationMessage,
             });
         }
         console.warn('[Cognitivo] Limite de iterações atingido.');

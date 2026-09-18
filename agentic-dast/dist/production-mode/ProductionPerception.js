@@ -70,6 +70,7 @@ const puppeteer_1 = __importDefault(require("puppeteer"));
 const axios_1 = __importDefault(require("axios"));
 const readline = __importStar(require("readline"));
 const config_1 = require("../config");
+const sameSite_1 = require("../util/sameSite");
 const TargetProfile_1 = require("./TargetProfile");
 /** Limites do crawl para nao varrer o app inteiro. */
 const MAX_PAGES = parseInt(process.env.CRAWL_MAX_PAGES ?? '25', 10);
@@ -79,6 +80,14 @@ class ProductionPerception {
     interceptedEndpoints = [];
     /** URLs de bundles JS vistos no crawl — fonte da descoberta ativa. */
     discoveredScriptUrls = new Set();
+    /**
+     * Bearer capturado do tráfego autenticado do browser. Em SPAs com
+     * Auth0/OAuth o access token vive em memória do JS (não em cookie nem
+     * localStorage), então só aparece no header Authorization das chamadas
+     * XHR/fetch à API. Capturá-lo aqui permite ao make_request bater na API
+     * autenticado (sem isso, todo make_request à API dá 401).
+     */
+    capturedBearer = null;
     targetUrl = config_1.config.targetUrl;
     targetHost = safeHost(config_1.config.targetUrl);
     /** Perfil do alvo (TARGET_PROFILE), se fornecido. */
@@ -120,6 +129,16 @@ class ProductionPerception {
         ]);
         const observedHosts = this.collectObservedHosts(apiEndpoints);
         auth.cookies = this.filterCookiesForHosts(this.lastCapturedCookies, observedHosts);
+        // Bearer capturado do browser: injeta no make_request via bearerToken
+        // (applyAuthContext o usa como header Authorization default). NAO e
+        // colocado em auth.jwt de proposito — o prompt imprime auth.jwt cru, e
+        // nao queremos vazar o token real ao LLM. O prompt so sinaliza que a
+        // sessao Bearer esta ativa e auto-injetada (tipo 'bearer-auto').
+        if (this.capturedBearer && !auth.bearerToken) {
+            auth.bearerToken = this.capturedBearer;
+            console.log('[Percepção/prod] make_request usará o Bearer capturado (Authorization auto-injetado, ' +
+                'token não exposto ao LLM).');
+        }
         // Corrige authRequired: como o crawl roda autenticado, todo endpoint
         // volta 200 => authRequired:false (enganoso). Re-sonda cada GET SEM
         // sessao para inferir o valor real (e expor endpoints genuinamente
@@ -611,6 +630,17 @@ class ProductionPerception {
                 if (resType !== 'xhr' && resType !== 'fetch')
                     return;
                 const url = response.url();
+                // Captura o primeiro Bearer que o browser envia para a API do
+                // proprio alvo (nao terceiros). E o token que o make_request
+                // precisa para exercitar a superficie autenticada.
+                if (!this.capturedBearer) {
+                    const authz = req.headers()['authorization'];
+                    if (authz && /^bearer\s+\S/i.test(authz) && this.sameSiteHost(safeHost(url))) {
+                        this.capturedBearer = authz.replace(/^bearer\s+/i, '').trim();
+                        console.log('[Percepção/prod] Bearer capturado do tráfego autenticado do browser ' +
+                            '(será injetado no make_request).');
+                    }
+                }
                 const contentType = response.headers()['content-type'];
                 let responseBody;
                 if (contentType && contentType.includes('application/json')) {
@@ -764,11 +794,11 @@ class ProductionPerception {
     }
     /** Host pertence ao dominio registravel do alvo (nao terceiros). */
     sameSiteHost(host) {
-        const parent = this.targetHost.split('.').slice(1).join('.');
-        return (!!host &&
-            (host === this.targetHost ||
-                host === parent ||
-                (parent.length > 0 && host.endsWith(`.${parent}`))));
+        // Domínio registrável ciente de public suffix (com.br, co.uk, ...).
+        // O antigo "drop-first-label" degenerava para o TLD nu em alvos apex
+        // de 2 labels (acme.com -> parent 'com'), casando terceiros como
+        // acme.auth0.com e capturando o Bearer errado. Ver util/sameSite.
+        return (0, sameSite_1.sameSite)(host, this.targetHost);
     }
     /**
      * Descoberta ativa (opt-in via ACTIVE_DISCOVERY). Complementa o crawl

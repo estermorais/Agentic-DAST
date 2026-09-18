@@ -17,6 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.HttpClient = exports.TARGET_DOWN_MARKER = void 0;
 const axios_1 = __importDefault(require("axios"));
 const config_1 = require("../../config");
+const sameSite_1 = require("../../util/sameSite");
 /**
  * Resolve uma URL que pode vir relativa (ex: "/api/Users") contra a
  * URL-base do alvo. Necessário porque o LLM, ao gerar make_request,
@@ -61,6 +62,13 @@ class HttpClient {
     defaultHeaders = {
         'Content-Type': 'application/json',
     };
+    // Headers de AUTENTICAÇÃO do alvo (Authorization/Cookie). Separados dos
+    // defaultHeaders porque só podem ser enviados a hosts do PRÓPRIO alvo —
+    // enviá-los a terceiros (Auth0, Freshchat, analytics que o agente
+    // resolva chamar) vazaria o token de sessão do alvo. Escopo = mesmo
+    // domínio registrável do alvo.
+    authHeaders = {};
+    authScopeHost = (0, sameSite_1.hostOf)(config_1.config.browserBaseUrl);
     // Circuit breaker: se as ultimas N requests seguidas indicam servidor
     // fora do ar, todas as chamadas subsequentes retornam TARGET_DOWN_MARKER
     // sem tocar na rede. O LLM viu duas vezes hoje o juice-shop cair
@@ -76,6 +84,14 @@ class HttpClient {
         this.defaultHeaders[key] = value;
     }
     /**
+     * Define um header de AUTENTICAÇÃO do alvo (Authorization/Cookie).
+     * Diferente de setDefaultHeader: só é enviado a requisições cujo host
+     * seja do mesmo domínio registrável do alvo — nunca a terceiros.
+     */
+    setAuthHeader(key, value) {
+        this.authHeaders[key] = value;
+    }
+    /**
      * Faz uma requisição HTTP e retorna uma Observation formatada.
      *
      * @param method  - Método HTTP (GET, POST, PUT, DELETE, PATCH)
@@ -85,7 +101,20 @@ class HttpClient {
      */
     async request(method, url, headers, body) {
         const fullUrl = resolveUrl(url);
-        const mergedHeaders = { ...this.defaultHeaders, ...headers };
+        // Só anexa os headers de auth do alvo se o host de destino for
+        // same-site (mesmo domínio registrável). Para terceiros, o token do
+        // alvo é omitido — evita exfiltração cross-host do Bearer/Cookie.
+        const destHost = (0, sameSite_1.hostOf)(fullUrl);
+        const includeAuth = (0, sameSite_1.sameSite)(destHost, this.authScopeHost);
+        const authToSend = Object.keys(this.authHeaders).length > 0;
+        const mergedHeaders = {
+            ...this.defaultHeaders,
+            ...(includeAuth ? this.authHeaders : {}),
+            ...headers,
+        };
+        if (authToSend && !includeAuth) {
+            console.log(`[Executor] Auth do alvo OMITIDA para host de terceiro (${destHost}) — não vaza o token.`);
+        }
         const axiosConfig = {
             method: method.toUpperCase(),
             url: fullUrl,
@@ -115,10 +144,11 @@ class HttpClient {
         }
         try {
             const response = await (0, axios_1.default)(axiosConfig);
+            const bodyCap = config_1.config.httpMaxBodyChars;
             const bodyStr = typeof response.data === 'object'
-                ? JSON.stringify(response.data, null, 2).substring(0, 1500)
-                : String(response.data).substring(0, 1500);
-            const truncationNote = JSON.stringify(response.data).length > 1500
+                ? JSON.stringify(response.data, null, 2).substring(0, bodyCap)
+                : String(response.data).substring(0, bodyCap);
+            const truncationNote = JSON.stringify(response.data).length > bodyCap
                 ? '\n[... resposta truncada]'
                 : '';
             const observation = (`HTTP ${response.status} ${method.toUpperCase()} ${fullUrl}\n` +

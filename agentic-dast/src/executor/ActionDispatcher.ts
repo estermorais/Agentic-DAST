@@ -123,7 +123,7 @@ export class ActionDispatcher {
         try {
           const parsed = JSON.parse(tokens) as { bearerToken?: string | null };
           if (parsed.bearerToken) {
-            http.setDefaultHeader('Authorization', parsed.bearerToken);
+            http.setAuthHeader('Authorization', parsed.bearerToken);
             console.log('[Executor] JWT extraído e configurado no HttpClient.');
           }
         } catch {
@@ -204,13 +204,15 @@ export class ActionDispatcher {
     const http = this.actor.getHttpClient();
     const token = auth.bearerToken ?? auth.jwt;
     if (token) {
-      http.setDefaultHeader('Authorization', `Bearer ${token}`);
+      // setAuthHeader (não setDefaultHeader): o token só é enviado a
+      // hosts do próprio alvo, nunca a terceiros — evita vazar o Bearer.
+      http.setAuthHeader('Authorization', `Bearer ${token}`);
     }
     if (auth.cookies && Object.keys(auth.cookies).length > 0) {
       const cookieString = Object.entries(auth.cookies)
         .map(([k, v]) => `${k}=${v}`)
         .join('; ');
-      http.setDefaultHeader('Cookie', cookieString);
+      http.setAuthHeader('Cookie', cookieString);
     }
   }
 

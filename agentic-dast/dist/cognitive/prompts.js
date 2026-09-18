@@ -35,7 +35,8 @@
  * ---------------------------------------------------------------
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SYSTEM_PROMPT = void 0;
+exports.PAGE_JS_BLOCK = exports.PASSIVE_FINDINGS_BLOCK = exports.FEWSHOT_BLOCK = exports.SYSTEM_PROMPT = void 0;
+exports.buildSystemPrompt = buildSystemPrompt;
 exports.buildInitialUserMessage = buildInitialUserMessage;
 exports.buildObservationMessage = buildObservationMessage;
 /**
@@ -641,14 +642,181 @@ Action Input:
 
 Após \`Observation\`, formule o próximo \`Thought\`.`;
 /**
+ * Bloco de exemplos (few-shot) — OPCIONAL, anexado ao final do system
+ * prompt apenas quando ativado (produção: USE_FEWSHOT=true). Não faz
+ * parte do baseline do TCC (n=30), que roda sem exemplos.
+ *
+ * OBJETIVO: reduzir alucinação e firmar o formato ReAct DEMONSTRANDO
+ * dois comportamentos-alvo, em vez de só descrevê-los:
+ *   (1) achado LEGÍTIMO — hipótese → make_request → Observation com
+ *       evidência concreta → report_finding ancorado nessa evidência;
+ *   (2) sessão INCONCLUSIVA — honestidade: finish com "0 findings" em
+ *       vez de inventar achados.
+ *
+ * VALIDADE EXTERNA: os exemplos usam um alvo FICTÍCIO (\`shop.example\`)
+ * e são explicitamente marcados como ilustrativos. O modelo é instruído
+ * a NÃO reaproveitar estes endpoints/achados no alvo real — só o padrão
+ * de raciocínio. Isso evita (a) vazar respostas para os alvos avaliados
+ * e (b) alucinação por mímica (reportar a vuln do exemplo por reflexo).
+ */
+exports.FEWSHOT_BLOCK = `
+
+# EXEMPLOS ILUSTRATIVOS (few-shot)
+
+Os dois exemplos abaixo são de um alvo FICTÍCIO (\`https://shop.example\`), \
+sem relação com o alvo real desta sessão. Servem só para demonstrar o PADRÃO \
+de raciocínio e o formato. **NÃO** presuma que estes endpoints, IDs ou \
+vulnerabilidades existem no alvo real — teste o alvo real do zero e reporte \
+apenas o que SUAS Observations demonstrarem.
+
+## Exemplo A — achado legítimo (IDOR ancorado em evidência)
+
+Thought: O AppMap lista GET /api/v1/orders/1043 (meu pedido) com id numérico. Hipótese: sem checagem de propriedade, consigo ler o pedido de outro usuário. Testo um id adjacente.
+Action: make_request
+Action Input:
+{"action":"make_request","method":"GET","url":"https://shop.example/api/v1/orders/1042","headers":{"Authorization":"Bearer <meu-jwt>"}}
+
+Observation: 200 OK. Body: {"orderId":1042,"userId":775,"email":"other.customer@shop.example","total":89.90,"items":[...]}
+
+Thought: Recebi 200 com dados de outro usuário (userId 775, e-mail de terceiro) usando MEU token. É IDOR de leitura confirmado por evidência concreta. Registro o finding com a resposta como evidência.
+Action: report_finding
+Action Input:
+{"action":"report_finding","title":"IDOR de leitura em /api/v1/orders/{id}","severity":"HIGH","category":"BROKEN_ACCESS_CONTROL","description":"Endpoint retorna pedido de outro usuário sem checar propriedade. CWE-639. CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N","steps":["Autenticar como usuário comum (pedido próprio 1043)","GET /api/v1/orders/1042 com o próprio token","Observar 200 com dados de userId 775"],"evidence":"HTTP 200 body: {\\"orderId\\":1042,\\"userId\\":775,\\"email\\":\\"other.customer@shop.example\\",...}"}
+
+Observation: Finding registrado (1 no total).
+
+Thought: Cobri Broken Access Control com evidência. Se fosse o fim da sessão, encerraria consolidando o que foi testado.
+Action: finish
+Action Input:
+{"action":"finish","summary":"1 finding HIGH confirmado: IDOR de leitura em /api/v1/orders/{id}, com resposta HTTP como evidência. Categorias tocadas: Broken Access Control. Ficou por testar: injection, XSS, JWT."}
+
+## Exemplo B — sessão inconclusiva (honestidade, sem inventar)
+
+Thought: O AppMap só expõe a tela de login; todos os endpoints de API retornam 401 sem sessão e não recebi credenciais válidas. Testo se algum endpoint responde sem auth.
+Action: make_request
+Action Input:
+{"action":"make_request","method":"GET","url":"https://shop.example/api/v1/profile","headers":{}}
+
+Observation: 401 Unauthorized. Body: {"error":"authentication required"}
+
+Thought: 401 é o comportamento esperado (proteção OK, não é achado). Sem credenciais válidas e sem superfície anônima, não há o que testar de forma confiável nesta sessão. NÃO vou inventar achados — encerro declarando a limitação com honestidade.
+Action: finish
+Action Input:
+{"action":"finish","summary":"0 findings. Sessão inconclusiva: alvo exige autenticação em toda a API (401 sem sessão) e nenhuma credencial válida foi fornecida; não houve superfície anônima testável. Recomenda-se rodar novamente com uma sessão autenticada (MANUAL_COOKIES/INTERACTIVE_LOGIN)."}
+
+---
+Fim dos exemplos ilustrativos. Volte ao alvo REAL desta sessão.`;
+/**
+ * Bloco OPT-IN (produção) que autoriza e OBRIGA reportar achados
+ * PASSIVOS (headers/config/CORS/cookies/info-disclosure) com evidência
+ * de header. Corrige o padrão observado em produção onde o agente
+ * identificava esses achados nos Thoughts mas nunca emitia report_finding
+ * porque a moldura anti-alucinação o fazia tratá-los como "suspeita não
+ * testada". NÃO enfraquece a regra 3a: para achado de EXPLORAÇÃO continua
+ * exigindo demonstração de efeito. Anexado só quando opts.passiveFindings.
+ */
+exports.PASSIVE_FINDINGS_BLOCK = `
+
+# ACHADOS PASSIVOS SÃO REPORTÁVEIS — E SÃO A SAÍDA PRIMÁRIA DE UMA PASSAGEM READ-ONLY
+
+Um achado PASSIVO é uma fraqueza de configuração, header de segurança ou divulgação de informação que a PRÓPRIA \
+RESPOSTA já demonstra — sem exploração, sem payload, sem ação além de observar o que o servidor devolveu. Assim que \
+uma Observation os evidenciar, você DEVE reportá-los:
+
+- **CSP fraca**: \`Content-Security-Policy\` com \`unsafe-inline\` e/ou \`unsafe-eval\`, \`default-src *\`, ou \
+\`frame-ancestors\` relaxado (§2.6, §2.14).
+- **Clickjacking**: ausência de \`X-Frame-Options\` E de \`frame-ancestors\` (§2.12).
+- **CORS permissivo**: \`Access-Control-Allow-Origin: *\` ou eco de \`Origin\` arbitrário em endpoint que devolve \
+dados (§2.12, §2.14).
+- **Cookies inseguros**: valores sensíveis (chaves de API, sessão, tokens) legíveis por o cookie não ser \
+\`HttpOnly\`; ausência de \`Secure\`/\`SameSite\` (§2.14).
+- **Divulgação de configuração**: config OpenID/JWKS/Auth0, SDK/chat de terceiros (Freshchat, Intercom), \
+\`Server\`/\`X-Powered-By\` verboso, endpoints de config/diagnóstico expostos (§2.13, §2.14).
+- **Headers de transporte/tipo ausentes**: \`Strict-Transport-Security\`, \`X-Content-Type-Options: nosniff\`, \
+\`Referrer-Policy\` (§2.14).
+
+**Regra operacional.** Para um achado PASSIVO, a EVIDÊNCIA é a própria linha de header (ou trecho do corpo) que você \
+já observou. Uma \`make_request\` (ou o \`extract_tokens\` que leu o cookie) que retornou esse header JÁ é a "Action \
+concreta" e o "teste ativo" exigidos pela regra 3a — você observou o estado real do alvo, não extrapolou. Portanto:
+
+- Assim que uma Observation revelar header/config/cookie inseguro, emita \`report_finding\` IMEDIATAMENTE, na iteração \
+seguinte, com a linha de header como \`evidence\`. NÃO adie para o \`finish\` — o \`finish\` NÃO cria findings, só \
+consolida os já registrados.
+- Não é preciso demonstrar exploração para reportar um passivo. "CSP permite \`unsafe-inline\`" é CONFIRMADO pelo \
+header presente; não exige um XSS funcionando para virar finding (LOW/MEDIUM conforme §4).
+- Numa passagem READ-ONLY (só GET/observação, sem escrita), os achados PASSIVOS são a saída PRIMÁRIA esperada. \
+Encerrar uma passagem read-only com headers inseguros observados mas ZERO \`report_finding\` é ERRO de sub-reporte — \
+não honestidade.
+
+**Isto NÃO enfraquece a regra 3a.** A fronteira permanece intacta:
+- Achado de EXPLORAÇÃO (IDOR, SQLi, XSS executado, Mass Assignment, price manipulation, JWT alg:none aceito, SSRF \
+alcançado): continua exigindo o teste ativo + a Observation que demonstra o EFEITO (dado de outro usuário, delay de \
+time-based, DOM executado, privilégio alterado). Header não basta; suspeita não basta.
+- Achado PASSIVO (config/header/disclosure): a Observation que mostra o header/valor JÁ é a demonstração. Basta ela.
+Em ambos vale o núcleo do 3a: reporte só o que uma Observation desta sessão demonstrou; nunca extrapole de \
+conhecimento paramétrico.`;
+/**
+ * Bloco OPT-IN (produção) que documenta as ações page_fetch e execute_js.
+ * Anexado só quando opts.pageJs. Essencial para SPAs Auth0/OAuth cujo
+ * access token vive em memória (não em storage): make_request sai anônimo,
+ * mas page_fetch/execute_js rodam DENTRO da página autenticada.
+ */
+exports.PAGE_JS_BLOCK = `
+
+# AÇÕES EXTRAS PARA APP AUTENTICADO POR SESSÃO DE BROWSER (SPA/OAuth/Auth0)
+
+Se a sessão é por cookie/OAuth e o access token vive EM MEMÓRIA (comum em SPAs Auth0), \`make_request\` (cliente HTTP \
+fora do browser) sai ANÔNIMO e recebe 401/403 em toda a API — mesmo com a navegação logada. Nesse caso NÃO gaste \
+iterações caçando o token em storage; use as ações abaixo, que executam DENTRO da página autenticada.
+
+## page_fetch
+Executa \`fetch()\` no contexto da página (herda cookies same-origin e, se o app fez patch de \`window.fetch\`, o \
+Bearer em memória). Use quando \`make_request\` volta 401 mas a navegação está autenticada.
+\`\`\`json
+{"action":"page_fetch","method":"GET|POST|PUT|PATCH|DELETE","url":"<URL ou caminho>","headers":{"...":"..."},"body":<objeto|null>}
+\`\`\`
+
+## execute_js
+Roda uma expressão JavaScript no contexto da página e retorna o resultado. Use para localizar/reusar o token em \
+memória — por exemplo: hookar \`window.fetch\`/\`XMLHttpRequest.setRequestHeader\` para capturar o header \
+\`Authorization\` que o app anexa na próxima chamada real; ou chamar o client Auth0 exposto (\`getTokenSilently()\`); \
+ou ler um global conhecido. De posse do Bearer, use-o em \`page_fetch\` ou \`make_request\`.
+\`\`\`json
+{"action":"execute_js","script":"<expressão JS que retorna string ou objeto>"}
+\`\`\`
+Exemplo para capturar o Authorization: \`execute_js\` com um script que sobrescreve \`window.fetch\` guardando o \
+header, aguarde uma ação autenticada da página, e leia o valor capturado num \`execute_js\` seguinte.`;
+/**
+ * Monta o system prompt. Sem opções (caso do TCC) retorna exatamente
+ * SYSTEM_PROMPT, byte-a-byte. Blocos opt-in são anexados na ordem
+ * passiveFindings → pageJs → fewShot (fewShot por último, para recência) —
+ * usados só no caminho de produção.
+ */
+function buildSystemPrompt(opts) {
+    let prompt = exports.SYSTEM_PROMPT;
+    if (opts?.passiveFindings)
+        prompt += exports.PASSIVE_FINDINGS_BLOCK;
+    if (opts?.pageJs)
+        prompt += exports.PAGE_JS_BLOCK;
+    if (opts?.fewShot)
+        prompt += exports.FEWSHOT_BLOCK;
+    return prompt;
+}
+/**
  * Gera a mensagem inicial do usuário com o AppMap serializado.
  * Esta mensagem inicia o loop ReAct.
  */
-function buildInitialUserMessage(appMap) {
+function buildInitialUserMessage(appMap, opts) {
+    const maxEndpoints = opts?.maxEndpoints ?? 40;
     // Sessao pode ser por JWT/Bearer OU por cookie (SSO/OAuth com token
     // opaco ou httpOnly). Sem esse sinal, alvos cookie-based apareciam
     // como "sem auth" e o LLM os tratava como app publico anonimo.
     const cookieNames = Object.keys(appMap.auth.cookies ?? {});
+    // Bearer capturado do tráfego do browser (SPA OAuth/Auth0): o token
+    // real fica em appMap.auth.bearerToken e é injetado AUTOMATICAMENTE no
+    // header Authorization do make_request (via applyAuthContext). O valor
+    // NUNCA é impresso no prompt — só sinalizamos que está ativo.
+    const hasBearer = !!appMap.auth.bearerToken;
     const summary = {
         baseUrl: appMap.baseUrl,
         framework: appMap.metadata.framework,
@@ -658,35 +826,73 @@ function buildInitialUserMessage(appMap) {
             requiresAuth: r.requiresAuth,
             numFormularios: r.forms.length,
         })),
-        endpointsApi: appMap.apiEndpoints.slice(0, 40).map((ep) => ({
+        endpointsApi: appMap.apiEndpoints.slice(0, maxEndpoints).map((ep) => ({
             method: ep.method,
             url: ep.url,
             status: ep.responseStatus,
             authRequired: ep.authRequired,
         })),
-        autenticacao: {
-            sessaoAutenticada: !!appMap.auth.jwt || cookieNames.length > 0,
-            tipo: appMap.auth.jwt ? 'bearer-jwt' : cookieNames.length > 0 ? 'cookie' : 'nenhuma',
-            jwtDisponivel: !!appMap.auth.jwt,
-            jwtToken: appMap.auth.jwt ? `${appMap.auth.jwt.substring(0, 50)}...` : null,
-            cookiesDisponiveis: cookieNames.length,
-            cookieNames, // apenas nomes; valores nunca vao ao prompt
-            email: appMap.auth.userEmail,
-        },
+        // ISOLAMENTO DO BASELINE: no caminho JWT (Juice Shop / TCC n=30, onde
+        // auth.jwt está setado) o bloco é EXATAMENTE os três campos originais
+        // — byte-a-byte idêntico ao baseline. O sinal enriquecido (sessão por
+        // cookie/Bearer, priorização, etc.) só aparece quando NÃO há jwt, ou
+        // seja, apenas no modo produção. Assim nenhum campo novo vaza para o
+        // prompt do baseline. (auth.bearerToken também é 'Bearer <jwt>' no
+        // Juice Shop, então gate por bearer NÃO isolaria — o gate correto é
+        // por auth.jwt.)
+        autenticacao: appMap.auth.jwt
+            ? {
+                jwtDisponivel: true,
+                jwtToken: `${appMap.auth.jwt.substring(0, 50)}...`,
+                email: appMap.auth.userEmail,
+            }
+            : {
+                sessaoAutenticada: hasBearer || cookieNames.length > 0,
+                tipo: hasBearer ? 'bearer-auto' : cookieNames.length > 0 ? 'cookie' : 'nenhuma',
+                jwtDisponivel: false,
+                // make_request já sai com Authorization: Bearer <token> injetado
+                // (escopado ao alvo); o agente não precisa nem vê o token.
+                bearerAutoInjetado: hasBearer,
+                jwtToken: null,
+                cookiesDisponiveis: cookieNames.length,
+                cookieNames, // apenas nomes; valores nunca vao ao prompt
+                email: appMap.auth.userEmail,
+            },
     };
     // Bloco de credencial: JWT (Juice Shop e afins) mantem o texto
     // original; sessao por cookie ganha instrucao explicita para o LLM
     // NAO tratar o alvo como publico.
     const credencialBlurb = appMap.auth.jwt
         ? `**Token JWT completo (usuário comum autenticado via login válido) para uso em requisições:**\n\`${appMap.auth.jwt}\``
-        : cookieNames.length > 0
-            ? `**Sessão autenticada via COOKIE (não há Bearer/JWT neste alvo).** A sessão de ${cookieNames.length} ` +
-                `cookie(s) já foi injetada no browser (ações \`navigate\`/\`click_element\` saem autenticadas) e no ` +
-                `header \`Cookie\` do HttpClient (ações \`make_request\` saem autenticadas). **NÃO trate o alvo como ` +
-                `público/anônimo** — teste a superfície AUTENTICADA: IDOR/BOLA em recursos com id na URL, escalada ` +
-                `de privilégio, acesso a dados de outros tenants/usuários, e falta de CSRF token (auth por cookie ` +
-                `sem CSRF é candidato crítico). Cookies presentes: ${cookieNames.join(', ')}.`
-            : `**Nenhuma sessão autenticada foi fornecida** — o alvo será testado como anônimo.`;
+        : appMap.auth.bearerToken
+            ? `**Sessão autenticada por Bearer token — INJETADO AUTOMATICAMENTE no header \`Authorization\` de TODO ` +
+                `\`make_request\`.** Você NÃO precisa obter, procurar, decodificar nem colar o token: cada \`make_request\` ` +
+                `já sai autenticado contra a API. **NÃO gaste iterações caçando o token** (Auth0, localStorage, /authorize) ` +
+                `— ele já está ativo. Foque em testar a superfície AUTENTICADA: IDOR/BOLA (troque ids/UUIDs para acessar ` +
+                `recursos de outros usuários/tenants e observe se retorna 200 com dados alheios), escalada de privilégio, ` +
+                `acesso cross-tenant e se cada endpoint valida a propriedade do recurso. Ao CONFIRMAR um problema por ` +
+                `evidência — inclusive LOW/MEDIUM (CORS permissivo, CSP fraca, config/OpenID exposta, info disclosure) — ` +
+                `emita \`report_finding\` na hora, não deixe para o fim.`
+            : cookieNames.length > 0
+                ? `**Sessão autenticada via COOKIE (não há Bearer/JWT neste alvo).** A sessão de ${cookieNames.length} ` +
+                    `cookie(s) já foi injetada no browser (ações \`navigate\`/\`click_element\` saem autenticadas) e no ` +
+                    `header \`Cookie\` do HttpClient (ações \`make_request\` saem autenticadas). **NÃO trate o alvo como ` +
+                    `público/anônimo** — teste a superfície AUTENTICADA: IDOR/BOLA em recursos com id na URL, escalada ` +
+                    `de privilégio, acesso a dados de outros tenants/usuários, e falta de CSRF token (auth por cookie ` +
+                    `sem CSRF é candidato crítico). Cookies presentes: ${cookieNames.join(', ')}.`
+                : `**Nenhuma sessão autenticada foi fornecida** — o alvo será testado como anônimo.`;
+    // Nota de priorização — só aparece no caminho de produção (opts.prioritized)
+    // e apenas quando há mais endpoints do que couberam no corte. Sem opts a
+    // string é vazia e a mensagem fica idêntica à do TCC.
+    const totalEndpoints = appMap.apiEndpoints.length;
+    const hiddenEndpoints = totalEndpoints - maxEndpoints;
+    const prioritizationNote = opts?.prioritized && hiddenEndpoints > 0
+        ? `> **Superfície priorizada por risco.** A aplicação-alvo expôs ${totalEndpoints} endpoints; ` +
+            `os ${maxEndpoints} listados acima são os de MAIOR probabilidade de vulnerabilidade ` +
+            `(métodos de escrita, sem auth, id na URL, rotas sensíveis, params de SSRF, docs de API). ` +
+            `Outros ${hiddenEndpoints} endpoints de menor prioridade foram descobertos mas omitidos deste ` +
+            `resumo — se esgotar os prioritários, peça-os via \`make_request\` explorando padrões observados.\n\n`
+        : '';
     return `## APPMAP DO ALVO
 
 A fase de Percepção produziu o mapa a seguir. Todo conhecimento sobre o alvo vem daqui e das Observations \
@@ -696,7 +902,7 @@ subsequentes.
 ${JSON.stringify(summary, null, 2)}
 \`\`\`
 
-${credencialBlurb}
+${prioritizationNote}${credencialBlurb}
 
 Nas primeiras 3-5 iterações, faça reconhecimento ativo (§1): baixe bundle JS principal se listado, tente \
 \`/robots.txt\`, \`/sitemap.xml\`, \`/.well-known/\`, faça fingerprint de servidor por headers, procure documentação \

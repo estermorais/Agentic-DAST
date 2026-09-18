@@ -12,6 +12,7 @@
 
 import axios, { AxiosRequestConfig } from 'axios';
 import { config } from '../../config';
+import { sameSite, hostOf } from '../../util/sameSite';
 
 /**
  * Resolve uma URL que pode vir relativa (ex: "/api/Users") contra a
@@ -61,6 +62,14 @@ export class HttpClient {
     'Content-Type': 'application/json',
   };
 
+  // Headers de AUTENTICAÇÃO do alvo (Authorization/Cookie). Separados dos
+  // defaultHeaders porque só podem ser enviados a hosts do PRÓPRIO alvo —
+  // enviá-los a terceiros (Auth0, Freshchat, analytics que o agente
+  // resolva chamar) vazaria o token de sessão do alvo. Escopo = mesmo
+  // domínio registrável do alvo.
+  private authHeaders: Record<string, string> = {};
+  private readonly authScopeHost = hostOf(config.browserBaseUrl);
+
   // Circuit breaker: se as ultimas N requests seguidas indicam servidor
   // fora do ar, todas as chamadas subsequentes retornam TARGET_DOWN_MARKER
   // sem tocar na rede. O LLM viu duas vezes hoje o juice-shop cair
@@ -78,6 +87,15 @@ export class HttpClient {
   }
 
   /**
+   * Define um header de AUTENTICAÇÃO do alvo (Authorization/Cookie).
+   * Diferente de setDefaultHeader: só é enviado a requisições cujo host
+   * seja do mesmo domínio registrável do alvo — nunca a terceiros.
+   */
+  setAuthHeader(key: string, value: string): void {
+    this.authHeaders[key] = value;
+  }
+
+  /**
    * Faz uma requisição HTTP e retorna uma Observation formatada.
    *
    * @param method  - Método HTTP (GET, POST, PUT, DELETE, PATCH)
@@ -92,7 +110,23 @@ export class HttpClient {
     body?: unknown,
   ): Promise<string> {
     const fullUrl = resolveUrl(url);
-    const mergedHeaders = { ...this.defaultHeaders, ...headers };
+
+    // Só anexa os headers de auth do alvo se o host de destino for
+    // same-site (mesmo domínio registrável). Para terceiros, o token do
+    // alvo é omitido — evita exfiltração cross-host do Bearer/Cookie.
+    const destHost = hostOf(fullUrl);
+    const includeAuth = sameSite(destHost, this.authScopeHost);
+    const authToSend = Object.keys(this.authHeaders).length > 0;
+    const mergedHeaders = {
+      ...this.defaultHeaders,
+      ...(includeAuth ? this.authHeaders : {}),
+      ...headers,
+    };
+    if (authToSend && !includeAuth) {
+      console.log(
+        `[Executor] Auth do alvo OMITIDA para host de terceiro (${destHost}) — não vaza o token.`,
+      );
+    }
 
     const axiosConfig: AxiosRequestConfig = {
       method: method.toUpperCase() as AxiosRequestConfig['method'],

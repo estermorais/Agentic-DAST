@@ -860,26 +860,32 @@ export function buildInitialUserMessage(appMap: AppMap, opts?: InitialMessageOpt
       status: ep.responseStatus,
       authRequired: ep.authRequired,
     })),
-    autenticacao: {
-      sessaoAutenticada: !!appMap.auth.jwt || hasBearer || cookieNames.length > 0,
-      tipo: appMap.auth.jwt
-        ? 'bearer-jwt'
-        : hasBearer
-          ? 'bearer-auto'
-          : cookieNames.length > 0
-            ? 'cookie'
-            : 'nenhuma',
-      jwtDisponivel: !!appMap.auth.jwt,
-      // make_request já sai com Authorization: Bearer <token> injetado —
-      // o agente não precisa (nem consegue ver) o token. Só incluímos o
-      // campo quando há Bearer, para o alvo do TCC (Juice Shop, sem Bearer)
-      // manter a mensagem inicial byte-a-byte idêntica ao baseline n=30.
-      ...(hasBearer ? { bearerAutoInjetado: true } : {}),
-      jwtToken: appMap.auth.jwt ? `${appMap.auth.jwt.substring(0, 50)}...` : null,
-      cookiesDisponiveis: cookieNames.length,
-      cookieNames, // apenas nomes; valores nunca vao ao prompt
-      email: appMap.auth.userEmail,
-    },
+    // ISOLAMENTO DO BASELINE: no caminho JWT (Juice Shop / TCC n=30, onde
+    // auth.jwt está setado) o bloco é EXATAMENTE os três campos originais
+    // — byte-a-byte idêntico ao baseline. O sinal enriquecido (sessão por
+    // cookie/Bearer, priorização, etc.) só aparece quando NÃO há jwt, ou
+    // seja, apenas no modo produção. Assim nenhum campo novo vaza para o
+    // prompt do baseline. (auth.bearerToken também é 'Bearer <jwt>' no
+    // Juice Shop, então gate por bearer NÃO isolaria — o gate correto é
+    // por auth.jwt.)
+    autenticacao: appMap.auth.jwt
+      ? {
+          jwtDisponivel: true,
+          jwtToken: `${appMap.auth.jwt.substring(0, 50)}...`,
+          email: appMap.auth.userEmail,
+        }
+      : {
+          sessaoAutenticada: hasBearer || cookieNames.length > 0,
+          tipo: hasBearer ? 'bearer-auto' : cookieNames.length > 0 ? 'cookie' : 'nenhuma',
+          jwtDisponivel: false,
+          // make_request já sai com Authorization: Bearer <token> injetado
+          // (escopado ao alvo); o agente não precisa nem vê o token.
+          bearerAutoInjetado: hasBearer,
+          jwtToken: null,
+          cookiesDisponiveis: cookieNames.length,
+          cookieNames, // apenas nomes; valores nunca vao ao prompt
+          email: appMap.auth.userEmail,
+        },
   };
 
   // Bloco de credencial: JWT (Juice Shop e afins) mantem o texto

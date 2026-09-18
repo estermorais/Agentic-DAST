@@ -36,6 +36,7 @@ import axios from 'axios';
 import * as readline from 'readline';
 
 import { config } from '../config';
+import { sameSite } from '../util/sameSite';
 import {
   AppMap,
   AppRoute,
@@ -880,13 +881,11 @@ export class ProductionPerception {
 
   /** Host pertence ao dominio registravel do alvo (nao terceiros). */
   private sameSiteHost(host: string): boolean {
-    const parent = this.targetHost.split('.').slice(1).join('.');
-    return (
-      !!host &&
-      (host === this.targetHost ||
-        host === parent ||
-        (parent.length > 0 && host.endsWith(`.${parent}`)))
-    );
+    // Domínio registrável ciente de public suffix (com.br, co.uk, ...).
+    // O antigo "drop-first-label" degenerava para o TLD nu em alvos apex
+    // de 2 labels (acme.com -> parent 'com'), casando terceiros como
+    // acme.auth0.com e capturando o Bearer errado. Ver util/sameSite.
+    return sameSite(host, this.targetHost);
   }
 
   /**

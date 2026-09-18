@@ -199,12 +199,90 @@ class BrowseTheWeb {
         const page = this.requirePage();
         const url = page.url();
         const title = await page.title();
+        const cap = config_1.config.readPageMaxChars;
         const text = await page.evaluate(() => document.body.innerText);
-        const truncated = text.substring(0, 2000);
-        const truncationNote = text.length > 2000
+        const truncated = text.substring(0, cap);
+        const truncationNote = text.length > cap
             ? `\n[... conteúdo truncado — ${text.length} chars total]`
             : '';
-        return `URL: ${url}\nTítulo: ${title}\nConteúdo:\n${truncated}${truncationNote}`;
+        let base = `URL: ${url}\nTítulo: ${title}\nConteúdo:\n${truncated}${truncationNote}`;
+        // Opt-in (produção): inclui o HTML-fonte além do innerText. innerText
+        // NÃO contém <script>, então sem isto o agente nunca vê as URLs dos
+        // bundles JS para baixá-los via make_request no recon.
+        if (config_1.config.readPageIncludeSource) {
+            const html = await page.content();
+            const htmlCut = html.substring(0, cap);
+            const htmlNote = html.length > cap
+                ? `\n[... HTML-fonte truncado — ${html.length} chars total]`
+                : '';
+            base += `\n\nHTML-fonte (para achar <script src>, links e endpoints):\n${htmlCut}${htmlNote}`;
+        }
+        return base;
+    }
+    /**
+     * Executa um fetch() DENTRO da página autenticada (contexto do browser).
+     * Diferente de make_request (axios fora do browser), esta chamada herda
+     * cookies same-origin e — se o SPA fez patch global de window.fetch — o
+     * Bearer que o próprio app anexa. Essencial para apps Auth0/SPA cujo
+     * access token vive em memória e nunca chega ao HttpClient.
+     */
+    async pageFetch(method, url, headers, body) {
+        const page = this.requirePage();
+        const fullUrl = resolveUrl(url);
+        const cap = config_1.config.httpMaxBodyChars;
+        try {
+            const res = await page.evaluate(async (args) => {
+                const init = {
+                    method: args.method,
+                    headers: args.headers || {},
+                    credentials: 'include',
+                };
+                if (args.body != null) {
+                    init.body =
+                        typeof args.body === 'string' ? args.body : JSON.stringify(args.body);
+                }
+                const r = await fetch(args.url, init);
+                const h = {};
+                r.headers.forEach((v, k) => {
+                    h[k] = v;
+                });
+                const text = await r.text();
+                return { status: r.status, headers: h, body: text };
+            }, { method: (method || 'GET').toUpperCase(), url: fullUrl, headers, body });
+            const bodyCut = res.body.substring(0, cap);
+            const note = res.body.length > cap ? '\n[... resposta truncada]' : '';
+            return (`HTTP ${res.status} ${(method || 'GET').toUpperCase()} ${fullUrl} (via página autenticada)\n` +
+                `Headers de resposta: ${JSON.stringify(res.headers)}\n` +
+                `Body:\n${bodyCut}${note}`);
+        }
+        catch (err) {
+            return `ERRO em page_fetch para "${fullUrl}": ${err.message}`;
+        }
+    }
+    /**
+     * Executa uma expressão JavaScript no contexto da página autenticada e
+     * retorna o resultado serializado. Primitivo poderoso: o LLM pode achar/
+     * reutilizar o token em memória (ex.: hookar window.fetch para capturar o
+     * header Authorization, ou ler o client Auth0/getTokenSilently). Sempre
+     * classificado como HIGH pelo RiskClassifier (exige aprovação humana).
+     */
+    async executeJs(script) {
+        const page = this.requirePage();
+        const cap = config_1.config.httpMaxBodyChars;
+        try {
+            const out = await page.evaluate(async (code) => {
+                // eslint-disable-next-line no-eval
+                const v = await (0, eval)(code);
+                return typeof v === 'string' ? v : JSON.stringify(v);
+            }, script);
+            const str = String(out);
+            const cut = str.substring(0, cap);
+            const note = str.length > cap ? '\n[... resultado truncado]' : '';
+            return `Resultado de execute_js:\n${cut}${note}`;
+        }
+        catch (err) {
+            return `ERRO em execute_js: ${err.message}`;
+        }
     }
     /**
      * Extrai tokens de autenticação do browser (JWT do localStorage + cookies).

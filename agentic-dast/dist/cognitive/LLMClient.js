@@ -81,6 +81,11 @@ class OpenRouterClient {
             const response = await axios_1.default.post(`${this.baseUrl}/chat/completions`, {
                 model: this.model,
                 max_tokens: 2048,
+                // Temperatura só é enviada se LLM_TEMPERATURE estiver definida;
+                // caso contrário usa o default do provedor (preserva o baseline).
+                ...(config_1.config.llmTemperature !== undefined
+                    ? { temperature: config_1.config.llmTemperature }
+                    : {}),
                 messages: [
                     // Prompt Caching estilo Anthropic via OpenRouter: o campo
                     // 'content' de string vira array de blocos com cache_control
@@ -126,12 +131,10 @@ class OpenRouterClient {
                 throw new Error(`OpenRouter retornou resposta inesperada: ${JSON.stringify(response.data).substring(0, 500)}`);
             }
             // Telemetria de custo por chamada — instrumentacao para diagnosticar
-            // se o prompt caching esta funcionando via OpenRouter. Precos de
-            // referencia (anthropic/claude-haiku-4.5 no OpenRouter, USD/MTok):
-            //   input regular : 1.00
-            //   cache write   : 1.25 (default_write nao vem explicito na resposta)
-            //   cache read    : 0.10 (~90% de desconto sobre input regular)
-            //   output        : 5.00
+            // se o prompt caching esta funcionando via OpenRouter. As tarifas
+            // (USD/MTok) vem de config.llmPrice*, cujo default deriva do modelo:
+            // Kimi (Moonshot) 0.71/3.21/0.18 ou Haiku 4.5 1.00/5.00/0.10. Antes
+            // estavam chumbadas em Haiku, superestimando o custo de outros modelos.
             const usage = response.data?.usage;
             if (usage) {
                 const inputTotal = usage.prompt_tokens ?? 0;
@@ -139,7 +142,10 @@ class OpenRouterClient {
                 const cacheWrite = usage.prompt_tokens_details?.cache_creation_input_tokens ?? 0;
                 const inputRegular = Math.max(0, inputTotal - cacheRead - cacheWrite);
                 const output = usage.completion_tokens ?? 0;
-                const costUSD = (inputRegular * 1.00 + cacheWrite * 1.25 + cacheRead * 0.10 + output * 5.00) / 1_000_000;
+                const costUSD = (inputRegular * config_1.config.llmPriceInput +
+                    cacheWrite * config_1.config.llmPriceCacheWrite +
+                    cacheRead * config_1.config.llmPriceCacheRead +
+                    output * config_1.config.llmPriceOutput) / 1_000_000;
                 const cacheHit = inputTotal > 0 ? (cacheRead / inputTotal * 100).toFixed(0) : '0';
                 console.log(`  [LLM] input=${inputTotal} (cache_read=${cacheRead}/${cacheHit}%, ` +
                     `cache_write=${cacheWrite}, regular=${inputRegular}) ` +
@@ -172,6 +178,11 @@ class AnthropicClient {
         const response = await this.client.messages.create({
             model: config_1.config.llmModel,
             max_tokens: 2048,
+            // Ver nota em OpenRouterClient/config.llmTemperature: só envia se
+            // LLM_TEMPERATURE estiver definida, senão usa o default (1.0).
+            ...(config_1.config.llmTemperature !== undefined
+                ? { temperature: config_1.config.llmTemperature }
+                : {}),
             system: [
                 {
                     type: 'text',
