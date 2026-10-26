@@ -10,7 +10,7 @@
 \label{tab:metricas-agregadas}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{Cenário} & \textbf{n} & \textbf{Precisão} & \textbf{Recall} & \textbf{F1 (média)} & \textbf{F1 (desvio)} & \textbf{Cobertura} \\
+\textbf{Cenário} & \textbf{n} & \textbf{Precisão} & \textbf{Revocação} & \textbf{F1 (média)} & \textbf{F1 (desvio)} & \textbf{Cobertura} \\
 \midrule
 A (ZAP puro) & 30 & 0,000 & 0,000 & 0,000 & 0,000 & 0/19 (0\%) \\
 B (ZAP + E2E) & 30 & 0,000 & 0,000 & 0,000 & 0,000 & 0/19 (0\%) \\
@@ -24,7 +24,7 @@ D (PentestGPT) & 30 & 0,559 & 0,225 & 0,312 & 0,120 & 12/19 (63\%) \\
 % --- Tabela 2: Cobertura por categoria (Cenario C) ------------
 \begin{table}[htbp]
 \centering
-\caption{Cobertura por categoria OWASP no Cenário C (Agentic DAST proposto)}
+\caption{Cobertura por categoria do Ground Truth no Cenário C (Agentic DAST proposto)}
 \label{tab:cobertura-categoria-c}
 \begin{tabular}{lcc}
 \toprule
@@ -44,7 +44,7 @@ Business Logic & 1/3 & 33\% \\
 % --- Tabela 3: Comparativo C vs D (dominancia) ----------------
 \begin{table}[htbp]
 \centering
-\caption{Análise comparativa entre o framework proposto (C) e o baseline estado-da-arte (D)}
+\caption{Comparação entre o framework proposto (C) e o PentestGPT (D)}
 \label{tab:comparativo-c-vs-d}
 \begin{tabular}{lccc}
 \toprule
@@ -52,8 +52,8 @@ Business Logic & 1/3 & 33\% \\
 \midrule
 F1 & 0,635 & 0,312 & +104\% \\
 Precisão & 0,828 & 0,559 & +48\% \\
-Recall & 0,523 & 0,225 & +132\% \\
-Cobertura acumulada & 16/19 & 12/19 & +4 vulns \\
+Revocação & 0,523 & 0,225 & +132\% \\
+Cobertura acumulada & 16/19 & 12/19 & +4 vulnerabilidades \\
 Desvio padrão de F1 & 0,062 & 0,120 & --48\% \\
 \bottomrule
 \end{tabular}

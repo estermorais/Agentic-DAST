@@ -62,11 +62,21 @@ A camada `LLMClient` desacopla o *loop* ReAct do provedor concreto de LLM. As du
     │   │   ├── scenario-d.ts                  ← PentestGPT (controle)
     │   │   └── pentestgpt/                    ← Adaptador Python do PentestGPT
     │   └── evaluation/                        ← Pipeline de avaliação
-    │       ├── ground-truth.json              ← 18 vulnerabilidades de referência
+    │       ├── ground-truth.json              ← 19 vulnerabilidades de referência
     │       ├── categories.ts
     │       ├── classify.ts                    ← TP / FP / FN
     │       ├── metrics.ts                     ← Precisão, Revocação, F1, F2
     │       └── evaluate.ts                    ← CLI de avaliação
+    ├── scripts/                               ← Execução e análise
+    │   ├── run-official-n30.ps1               ← Runner das 30 rodadas por cenário
+    │   ├── statistical-analysis.py            ← Wilcoxon, Mann-Whitney, Cliff, bootstrap
+    │   ├── decomposicao-por-fonte.js          ← F1/cobertura por fonte (ReAct/Abuse/ZAP)
+    │   ├── cost-time-analysis.py              ← Custo e tempo por execução
+    │   └── generate-tcc-artifacts.py          ← Tabelas e figuras do artigo
+    ├── reports/                               ← Dados (ver reports/README.md)
+    │   ├── report-*.json / scenario-*.json    ← 120 relatórios brutos da rodada oficial
+    │   ├── robustez-kimi/                     ← Replicação do Cenário C com Kimi K2.7
+    │   └── tcc-artifacts/                     ← Tabelas, figuras e resumos
     ├── dist/                                  ← JavaScript compilado
     ├── docs/                                  ← Documentação técnica
     ├── targets/                               ← Target Profiles (perfis de alvo)
@@ -131,7 +141,7 @@ Os relatórios JSON são salvos em `agentic-dast/reports/`.
 npm run evaluate                # processa todos os relatórios de reports/
 ```
 
-O `evaluate` lê todos os JSONs em `reports/`, classifica cada *finding* contra a matriz *Ground Truth* (18 vulnerabilidades), calcula Precisão, Revocação, F1 e F2 por cenário e por categoria, e grava um resumo agregado em `reports/_evaluation-summary.json`.
+O `evaluate` lê todos os JSONs em `reports/`, classifica cada *finding* contra a matriz *Ground Truth* (19 vulnerabilidades), calcula Precisão, Revocação, F1 e F2 por cenário e por categoria, e grava um resumo agregado em `reports/_evaluation-summary.json`.
 
 ---
 
@@ -160,27 +170,25 @@ Teste de **Wilcoxon *signed-rank*** pareado para os pares (A, C), (B, C) e (C, D
 
 ---
 
-## Status do projeto
+## Resultados
 
-**Concluído (TCC I):**
+Experimento concluído: **120 execuções** (30 por cenário) sobre o OWASP Juice Shop v17.2.0. Modelo do Cenário C: Claude Haiku 4.5; do Cenário D: PentestGPT sobre Claude Sonnet.
 
-- Implementação completa do *framework* (4 módulos, ~3 mil linhas de TypeScript)
-- Adaptador `LLMClient` com suporte a Anthropic e Ollama
-- 8 *Abuse Cases* cobrindo 6 categorias do OWASP Top 10
-- Cenários A, B, C e D implementados e validados em *smoke tests*
-- Matriz *Ground Truth* com 18 vulnerabilidades sobre o Juice Shop
-- *Pipeline* de avaliação automática (Wilcoxon-*ready*, IC 95 % por *bootstrap*)
-- Protocolo experimental revisado, incorporando *feedback* do orientador
-- Artigo no formato SBC com Introdução, Fundamentação Teórica, Trabalhos Relacionados, Framework e Plano de Avaliação
+| Cenário | F1 (média ± dp) | Cobertura |
+|---|---|---|
+| A — ZAP (*spider* + *scan* ativo) | 0,000 ± 0,000 | 0/19 |
+| B — ZAP passivo + navegação E2E | 0,000 ± 0,000 | 0/19 |
+| **C — Agentic DAST (Haiku 4.5)** | **0,635 ± 0,062** | **16/19** |
+| D — PentestGPT (Sonnet) | 0,312 ± 0,120 | 12/19 |
 
-**A fazer (TCC II):**
+Principais achados (dados brutos em [`agentic-dast/reports/`](agentic-dast/reports/)):
 
-- Execução das 120 rodadas (30 × 4 cenários) com modelos definidos com o orientador
-- Análise estatística completa (Wilcoxon + IC 95 %)
-- Geração dos gráficos finais (Matplotlib + Seaborn + SciencePlots, estilo IEEE)
-- Redação das seções de Resultados e Discussão
-- Espelhamento anônimo do repositório para submissão duplamente cega
-- Submissão a conferência (alvo inicial: **SBSeg**)
+- As duas configurações do ZAP avaliadas não detectaram nenhuma das 19 vulnerabilidades funcionais do gabarito — apenas alertas de configuração.
+- O *framework* completo supera o PentestGPT em F1 (Mann-Whitney e Wilcoxon $p < 10^{-8}$; Cliff's $\delta = 0{,}963$).
+- A **decomposição por fonte** mostra que essa vantagem vem da biblioteca de *Abuse Cases*, escrita para o alvo: isolado, o *loop* ReAct obteve F1 de 0,152, **abaixo** do PentestGPT. No alvo estudado, o conhecimento de domínio codificado em testes estruturados pesou mais do que o raciocínio autônomo do LLM.
+- **Análise de sensibilidade ao modelo:** a replicação do Cenário C com o Kimi K2.7 ([`reports/robustez-kimi/`](agentic-dast/reports/robustez-kimi/)) confirma o achado central — o ReAct continua abaixo do PentestGPT e a vantagem segue vindo dos *Abuse Cases*.
+
+O código, os relatórios brutos das 120 execuções, os *scripts* de análise e a replicação com Kimi estão versionados neste repositório.
 
 ---
 

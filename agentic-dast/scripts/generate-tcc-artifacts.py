@@ -120,7 +120,7 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
 \label{tab:metricas-agregadas}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{Cenário} & \textbf{n} & \textbf{Precisão} & \textbf{Recall} & \textbf{F1 (média)} & \textbf{F1 (desvio)} & \textbf{Cobertura} \\
+\textbf{Cenário} & \textbf{n} & \textbf{Precisão} & \textbf{Revocação} & \textbf{F1 (média)} & \textbf{F1 (desvio)} & \textbf{Cobertura} \\
 \midrule
 """
     # Ordem A -> B -> D -> C: apresenta baselines antes, framework proposto
@@ -149,7 +149,7 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
     latex += r"""% --- Tabela 2: Cobertura por categoria (Cenario C) ------------
 \begin{table}[htbp]
 \centering
-\caption{Cobertura por categoria OWASP no Cenário C (Agentic DAST proposto)}
+\caption{Cobertura por categoria do Ground Truth no Cenário C (Agentic DAST proposto)}
 \label{tab:cobertura-categoria-c}
 \begin{tabular}{lcc}
 \toprule
@@ -182,7 +182,7 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
     latex += r"""% --- Tabela 3: Comparativo C vs D (dominancia) ----------------
 \begin{table}[htbp]
 \centering
-\caption{Análise comparativa entre o framework proposto (C) e o baseline estado-da-arte (D)}
+\caption{Comparação entre o framework proposto (C) e o PentestGPT (D)}
 \label{tab:comparativo-c-vs-d}
 \begin{tabular}{lccc}
 \toprule
@@ -195,8 +195,8 @@ def gen_latex_tables(summary: dict, cov: dict) -> str:
 
     latex += f"F1 & {n(c_agg['meanF1'])} & {n(d_agg['meanF1'])} & +{pct_gain(c_agg['meanF1'], d_agg['meanF1']):.0f}\\% \\\\\n"
     latex += f"Precisão & {n(c_agg['meanPrec'])} & {n(d_agg['meanPrec'])} & +{pct_gain(c_agg['meanPrec'], d_agg['meanPrec']):.0f}\\% \\\\\n"
-    latex += f"Recall & {n(c_agg['meanRecall'])} & {n(d_agg['meanRecall'])} & +{pct_gain(c_agg['meanRecall'], d_agg['meanRecall']):.0f}\\% \\\\\n"
-    latex += f"Cobertura acumulada & {len(matched['C'])}/19 & {len(matched['D'])}/19 & +{len(matched['C'])-len(matched['D'])} vulns \\\\\n"
+    latex += f"Revocação & {n(c_agg['meanRecall'])} & {n(d_agg['meanRecall'])} & +{pct_gain(c_agg['meanRecall'], d_agg['meanRecall']):.0f}\\% \\\\\n"
+    latex += f"Cobertura acumulada & {len(matched['C'])}/19 & {len(matched['D'])}/19 & +{len(matched['C'])-len(matched['D'])} vulnerabilidades \\\\\n"
     latex += f"Desvio padrão de F1 & {n(c_agg['stdevF1'])} & {n(d_agg['stdevF1'])} & --{(d_agg['stdevF1']-c_agg['stdevF1'])/d_agg['stdevF1']*100:.0f}\\% \\\\\n"
     latex += r"\bottomrule" + "\n"
     latex += r"\end{tabular}" + "\n"
