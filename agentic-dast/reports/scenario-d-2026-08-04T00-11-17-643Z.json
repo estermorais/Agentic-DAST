@@ -1,0 +1,55 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-04T00:11:17.641Z",
+  "durationMs": 136155,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 5,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "(nonexistent_baseline_test@example.com / wrongpass123) returned HTTP 401 \"Invalid email or password.\" Test payload email admin@juice-sh.op'-- with password wrongpass returned HTTP 200 with a valid JWT and admin user object (role: admin), confirming SQL injection-based authentication bypass on POST /rest/user/login. --- {\"status\":\"success\",\"data\":[{\"id\":1,\"name\":\"Apple Juice (1000ml)\",\"description\":\"The all-time classic.\",\"price\":1.99,\"deluxePrice\":0.99,\"image\":\"apple_juice.jpg\",\"createdAt\":\"2026-08-04T00:07:57.271Z\",\"updatedAt\":\"2026-08-04T00:07:57.271Z\",\"del",
+      "discoveredAt": "2026-08-04T00:11:17.641Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "jecting a single quote (q=apple') altered the result set/error behavior: the server returned a 500 error page with SQLITE_ERROR near \"'%'\" syntax error, confirming the q parameter is concatenated unsanitized into a raw SQL LIKE query — vulnerable to SQL injection (OWASP A03: Injection). --- Exploited UNION-based SQL injection in GET /rest/products/search?q= using payload: q=')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users-- -. The endpoint returned product rows interleaved with Users table rows, lea",
+      "discoveredAt": "2026-08-04T00:11:17.641Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ne_test@example.com / wrongpass123) returned HTTP 401 \"Invalid email or password.\" Test payload email admin@juice-sh.op'-- with password wrongpass returned HTTP 200 with a valid JWT and admin user object (role: admin), confirming SQL injection-based authentication bypass on POST /rest/user/login. --- {\"status\":\"success\",\"data\":[{\"id\":1,\"name\":\"Apple Juice (1000ml)\",\"description\":\"The all-time classic.\",\"price\":1.99,\"deluxePrice\":0.99,\"image\":\"apple_juice.jpg\",\"createdAt\":\"2026-08-04T00:07:57.271Z\",\"updatedAt\":\"2026-",
+      "discoveredAt": "2026-08-04T00:11:17.641Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "e JSON config, 21770 bytes), legacy `/api/*` Sequelize-backed REST endpoints (confirmed live: `/api/Products?size=3` returns product records with id/name/description/price/deluxePrice/image/createdAt/updatedAt/deletedAt fields), a static asset path `/ftp/` returning HTTP 200, and `/robots.txt` returning `User-agent: *\\nDisallow` (disallow-all, non-standard/empty disallow value). Favicon served from `assets/public/favicon_js.ico`. No server banner/version header present in responses. --- Baseline GET",
+      "discoveredAt": "2026-08-04T00:11:17.641Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Enumerated http://localhost:3000, identified as OWASP Juice Shop (MIT-licensed, Bjoern Kimminich). Notable response headers on `/`: Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, Feature-Policy: payment 'self', and a custom X-Recruiting: /#/jobs header leaking an internal SPA route. Angular/Material SPA served from index.html with inline styles referencing `mat-s",
+      "discoveredAt": "2026-08-04T00:11:17.641Z"
+    }
+  ]
+}

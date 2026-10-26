@@ -1,0 +1,55 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-03T18:24:09.899Z",
+  "durationMs": 186962,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 5,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "d admin JWT auth token (role admin, email admin@juice-sh.op), while the invalid-credential control returned HTTP 401 \"Invalid email or password.\" A whitespace-variant injection ('or 1=1-- ) also returned HTTP 200 with a fresh admin token, confirming SQL injection based authentication bypass on the login endpoint. --- Used the admin JWT obtained via SQL injection auth bypass (' OR 1=1-- against POST /rest/user/login) as a Bearer token against GET /api/Users/1. The server returned HTTP 200 with the full admin user record (role: admin, email: admin@ju",
+      "discoveredAt": "2026-08-03T18:24:09.899Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "d admin JWT auth token (role admin, email admin@juice-sh.op), while the invalid-credential control returned HTTP 401 \"Invalid email or password.\" A whitespace-variant injection ('or 1=1-- ) also returned HTTP 200 with a fresh admin token, confirming SQL injection based authentication bypass on the login endpoint. --- Used the admin JWT obtained via SQL injection auth bypass (' OR 1=1-- against POST /rest/user/login) as a Bearer token against GET /api/Users/1. The server returned HTTP 200 with the full admin",
+      "discoveredAt": "2026-08-03T18:24:09.899Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "/api/Products (200 OK), plus static asset route /ftp/ (200 OK). Frontend is an Angular SPA (route /#/jobs) served with static assets under /assets/public/. --- POST /rest/user/login with email=' OR 1=1-- and password=x returned HTTP 200 with a valid admin JWT auth token (role admin, email admin@juice-sh.op), while the invalid-credential control returned HTTP 401 \"Invalid email or password.\" A whitespace-variant injection ('or 1=1-- ) also returned HTTP 200 with a fresh admin token, confirming SQL injecti",
+      "discoveredAt": "2026-08-03T18:24:09.899Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ting header. Root headers reveal Access-Control-Allow-Origin: *, X-Content-Type-Options, X-Frame-Options SAMEORIGIN, Feature-Policy. Discovered endpoints: /rest/products/search?q= (200, REST search API), /rest/user/whoami (200, returns {\"user\":{}}), /ftp/ (200, directory listing enabled - misconfiguration), /robots.txt (discloses Disallow: /ftp, confirming/pointing to the exposed FTP listing), /package.json (served, license header returned). Client app is SPA using hash routing (/#/jobs referenced b",
+      "discoveredAt": "2026-08-03T18:24:09.899Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Enumerated http://localhost:3000 surface: fingerprinted as OWASP Juice Shop via X-Recruiting header. Root headers reveal Access-Control-Allow-Origin: *, X-Content-Type-Options, X-Frame-Options SAMEORIGIN, Feature-Policy. Discovered endpoints: /rest/products/search?q= (200, REST search API), /rest/user/whoami (200, returns {\"user\":{}}), /ftp/ (200, directory listing enabled - misconfiguration), /rob",
+      "discoveredAt": "2026-08-03T18:24:09.899Z"
+    }
+  ]
+}

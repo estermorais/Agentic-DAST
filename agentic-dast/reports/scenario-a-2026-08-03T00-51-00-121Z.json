@@ -1,0 +1,87 @@
+{
+  "scenario": "A",
+  "description": "ZAP spider tradicional + scan ativo (sem navegação humana)",
+  "generatedAt": "2026-08-03T00:51:00.118Z",
+  "durationMs": 367891,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 6,
+  "findings": [
+    {
+      "title": "[ZAP] Cross-Domain Misconfiguration",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10098",
+      "description": "Web browser data loading may be possible, due to a Cross Origin Resource Sharing (CORS) misconfiguration on the web server. | CWE-264 | WASC-14",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/robots.txt",
+        "Confiança: Medium/3",
+        "Solução: Ensure that sensitive data is not available in an unauthenticated manner (using IP address white-listing, for instance).\nConfigure the \"Access-Control-Allow-Origin\" HTTP header to a more restrictive s"
+      ],
+      "evidence": "Access-Control-Allow-Origin: *",
+      "discoveredAt": "2026-08-03T00:51:00.117Z"
+    },
+    {
+      "title": "[ZAP] Vulnerable JS Library",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10003",
+      "description": "The identified library appears to be vulnerable. | CWE-1395 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/chunk-LHKS7QUN.js",
+        "Confiança: Medium/3",
+        "Solução: Upgrade to the latest version of the affected library."
+      ],
+      "evidence": "[\"ng-version\",\"20.3.18\"]",
+      "discoveredAt": "2026-08-03T00:51:00.117Z"
+    },
+    {
+      "title": "[ZAP] Content Security Policy (CSP) Header Not Set",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10038",
+      "description": "Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page — covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files. | CWE-693 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000",
+        "Confiança: High/3",
+        "Solução: Ensure that your web server, application server, load balancer, etc. is configured to set the Content-Security-Policy header."
+      ],
+      "evidence": "http://juice-shop:3000",
+      "discoveredAt": "2026-08-03T00:51:00.117Z"
+    },
+    {
+      "title": "[ZAP] Modern Web Application",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10109",
+      "description": "The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000",
+        "Confiança: Medium/3",
+        "Solução: This is an informational alert and so no changes are required."
+      ],
+      "evidence": "<script>\n    window.addEventListener(\"load\", function(){\n      window.cookieconsent.initialise({\n        \"palette\": {\n          \"popup\": { \"background\": \"var(--theme-primary)\", \"text\": \"var(--theme-text)\" },\n          \"button\": { \"background\": \"var(--theme-accent)\", \"text\": \"var(--theme-text)\" }\n        },\n        \"theme\": \"classic\",\n        \"position\": \"bottom-right\",\n        \"content\": { \"message\": \"This website uses fruit cookies to ensure you get the juiciest tracking experience.\", \"dismiss\": \"Me want it!\", \"link\": \"But me wait!\", \"href\": \"https://www.youtube.com/watch?v=9PnbKL3wuH4\" }\n      })});\n  </script>",
+      "discoveredAt": "2026-08-03T00:51:00.117Z"
+    },
+    {
+      "title": "[ZAP] Timestamp Disclosure - Unix",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10096",
+      "description": "A timestamp was disclosed by the application/web server. - Unix | CWE-497 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/sitemap.xml",
+        "Confiança: Low/3",
+        "Solução: Manually confirm that the timestamp data is not sensitive, and that the data cannot be aggregated to disclose exploitable patterns."
+      ],
+      "evidence": "1650485437",
+      "discoveredAt": "2026-08-03T00:51:00.117Z"
+    },
+    {
+      "title": "[ZAP] User Agent Fuzzer",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10104",
+      "description": "Check for differences in response based on fuzzed User Agent (eg. mobile sites, access as a Search Engine Crawler). Compares the response statuscode and the hashcode of the response body with the original response. | CWE-0 | WASC-0",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/assets",
+        "Confiança: Medium/3"
+      ],
+      "evidence": "http://juice-shop:3000/assets",
+      "discoveredAt": "2026-08-03T00:51:00.117Z"
+    }
+  ]
+}

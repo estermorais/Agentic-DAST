@@ -1,0 +1,73 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-02T16:18:51.084Z",
+  "durationMs": 157897,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 7,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "lid email or password.\" Injection payload email=' OR 1=1-- returned HTTP 200 with a valid JWT for admin@juice-sh.op (role admin). Boolean control email=' OR 2=2-- also returned HTTP 200 with the identical admin JWT/response, confirming boolean-based SQL injection authentication bypass. --- Access-Control-Allow-Origin: *\r X-Content-Type-Options: nosniff\r X-Frame-Options: SAMEORIGIN\r Feature-Policy: payment 'self'\r X-Recruiting: /#/jobs --- /robots.txt -> 200 /sitemap.xml -> 200 /rest/products -> 500 /rest/user/whoami -> 200 /rest/",
+      "discoveredAt": "2026-08-02T16:18:51.084Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ose error/misconfiguration leak; /#/administration SPA route returned 200 and served the Angular app shell (client-side route, would render admin UI without server-side auth gate, relying on client-side route guards). --- Tested /rest/user/login for SQL injection. Baseline (nonexistent@test.com/wrongpass) returned HTTP 401 \"Invalid email or password.\" Injection payload email=' OR 1=1-- returned HTTP 200 with a valid JWT for admin@juice-sh.op (role admin). Boolean control email=' OR 2=2-- also returned HTTP 2",
+      "discoveredAt": "2026-08-02T16:18:51.084Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "t@test.com/wrongpass) returned HTTP 401 \"Invalid email or password.\" Injection payload email=' OR 1=1-- returned HTTP 200 with a valid JWT for admin@juice-sh.op (role admin). Boolean control email=' OR 2=2-- also returned HTTP 200 with the identical admin JWT/response, confirming boolean-based SQL injection authentication bypass. --- Access-Control-Allow-Origin: *\r X-Content-Type-Options: nosniff\r X-Frame-Options: SAMEORIGIN\r Feature-Policy: payment 'self'\r X-Recruiting: /#/jobs --- /robots.txt -> 200 /s",
+      "discoveredAt": "2026-08-02T16:18:51.084Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "SPA route. No CSP or HSTS headers were observed (absence noted). Surface enumerated: root SPA at / (Angular app, 75002 bytes HTML), REST API endpoint /rest/products/search?q= returning JSON product data (application/json), and static asset directory /ftp/ returning a directory listing (11322 bytes HTML) exposing files. --- Enumerated common routes/endpoints on http://localhost:3000. Live endpoints found: /robots.txt (200), /sitemap.xml (200), /rest/user/whoami (200), /rest/admin/application-version",
+      "discoveredAt": "2026-08-02T16:18:51.084Z"
+    },
+    {
+      "title": "Information disclosure",
+      "severity": "MEDIUM",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou information disclosure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "asset directory /ftp/ returning a directory listing (11322 bytes HTML) exposing files. --- Enumerated common routes/endpoints on http://localhost:3000. Live endpoints found: /robots.txt (200), /sitemap.xml (200), /rest/user/whoami (200), /rest/admin/application-version (200), /ftp (200), /#/administration (200), /main.js (200), /vendor.js (200), /assets (301 redirect). /rest/products and /api/ returned 500 (endpoint exists but errored, likely needs params/auth). --- Unauthenticated requests: /rest/admin/applicatio",
+      "discoveredAt": "2026-08-02T16:18:51.084Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Discovery of http://localhost:3000 identified the app as OWASP Juice Shop. Headers present: Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, Feature-Policy: payment 'self', and a custom X-Recruiting: /#/jobs header revealing an SPA route. No CSP or HSTS headers were observed (absence noted). Surface enumerated: root SPA at /",
+      "discoveredAt": "2026-08-02T16:18:51.084Z"
+    },
+    {
+      "title": "Missing security headers",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou missing security headers durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "identified the app as OWASP Juice Shop. Headers present: Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, Feature-Policy: payment 'self', and a custom X-Recruiting: /#/jobs header revealing an SPA route. No CSP or HSTS headers were observed (absence noted). Surface enumerated: root SPA at / (Angular app, 75002 bytes HTML), REST API endpoint /rest/products/search?q= returning JSON product data (application/json), and static asset directory /ftp/ returning a",
+      "discoveredAt": "2026-08-02T16:18:51.084Z"
+    }
+  ]
+}

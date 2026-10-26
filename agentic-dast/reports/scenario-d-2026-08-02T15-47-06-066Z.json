@@ -1,0 +1,37 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-02T15:47:06.064Z",
+  "durationMs": 152799,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 3,
+  "findings": [
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ight of UNION do not have the same number of result columns\". The differing SQL error messages (vs. clean 200/JSON baseline) confirm the q parameter is concatenated unsanitized into a raw SQL query, establishing it as SQL-injectable. --- UNION-based SQL injection confirmed exploitable in the rest/products/search q parameter. Payload: q=z')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users-- (URL-encoded) returned all 22 Users table rows mapped into the product fields, exfiltrating admin@juice-sh.op, sup",
+      "discoveredAt": "2026-08-02T15:47:06.064Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "sitemap.xml=200, ftp/=200, rest/products/search=200, rest/user/whoami=200, api/Users=401 (auth-protected REST endpoint), api/Products=200, metrics=200, .well-known/security.txt=200. Indicates REST API namespace under /rest/ and /api/, an ftp/ static directory listing, and exposed /metrics endpoint. --- Tested rest/products/search?q= with three payloads. Baseline q=apple -> HTTP 200, valid JSON product results. Single-quote q=apple' -> HTTP 500 with SQLite syntax error \"near '%': syntax error\". UNION-style q=appl",
+      "discoveredAt": "2026-08-02T15:47:06.064Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Target is OWASP Juice Shop (Angular SPA + Node/Express backend). Root GET / returns 200 with security headers (Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, X-Recruiting: /#/jobs). Enumerated paths: robots.txt=200, sitemap.xml=200, ftp/=200, rest/products/search=200, rest/user/whoami=200, api/Users=401 (auth-protected REST endpoint), api/Pro",
+      "discoveredAt": "2026-08-02T15:47:06.064Z"
+    }
+  ]
+}

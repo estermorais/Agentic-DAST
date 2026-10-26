@@ -1,0 +1,64 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-02T22:52:11.269Z",
+  "durationMs": 352857,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 6,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "is reachable without login (access control for the admin UI, if any, is client-side only). --- POST /rest/user/login with email=' OR 1=1-- and password=x returned HTTP 200 with a valid JWT authenticating as admin@juice-sh.op (role admin), confirming SQL injection authentication bypass. Control request with a non-existent email returned HTTP 401 \"Invalid email or password.\", confirming normal rejection behavior differs from the injected case. --- Confirmed SQL injection authentication bypass on POST /rest/user/login. Submitting an",
+      "discoveredAt": "2026-08-02T22:52:11.269Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "is reachable without login (access control for the admin UI, if any, is client-side only). --- POST /rest/user/login with email=' OR 1=1-- and password=x returned HTTP 200 with a valid JWT authenticating as admin@juice-sh.op (role admin), confirming SQL injection authentication bypass. Control request with a non-existent email returned HTTP 401 \"Invalid email or password.\", confirming normal rejection behavior differs from the injected case. --- Confirmed SQL injection authentication bypass on POST /rest/use",
+      "discoveredAt": "2026-08-02T22:52:11.269Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ithout login (access control for the admin UI, if any, is client-side only). --- POST /rest/user/login with email=' OR 1=1-- and password=x returned HTTP 200 with a valid JWT authenticating as admin@juice-sh.op (role admin), confirming SQL injection authentication bypass. Control request with a non-existent email returned HTTP 401 \"Invalid email or password.\", confirming normal rejection behavior differs from the injected case. --- Confirmed SQL injection authentication bypass on POST /rest/user/login. Submitting an",
+      "discoveredAt": "2026-08-02T22:52:11.269Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "OWASP Juice Shop (Express/Node), headers show Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, Feature-Policy: payment 'self', X-Recruiting: /#/jobs (info leak/easter egg). robots.txt discloses Disallow: /ftp (hidden path). Path probe results: / (200, Angular SPA index.html), /robots.txt (200), /sitemap.xml (200), /admin (200, SPA route), /login (200, SPA route), /.well-known (200), /api (500 - Express error \"Unexpected path: /api/\", confirms API router",
+      "discoveredAt": "2026-08-02T22:52:11.269Z"
+    },
+    {
+      "title": "Information disclosure",
+      "severity": "MEDIUM",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou information disclosure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "sed). Entry points identified: Angular SPA client-side routes (/#/login, /#/admin, /#/jobs), server-side /api/* and /rest/* REST API namespaces, exposed /ftp file directory, and /metrics endpoint. --- GET /api and GET /rest both return HTTP 500 with verbose error pages that disclose: the framework/version banner \"OWASP Juice Shop (Express ^4.22.1)\", the internal error message \"Error: Unexpected path: /api\" (and /rest), and a full Node.js stack trace exposing absolute internal filesystem paths (e.g. /juice-sh",
+      "discoveredAt": "2026-08-02T22:52:11.269Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Enumerated http://localhost:3000. Fingerprint: OWASP Juice Shop (Express/Node), headers show Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, Feature-Policy: payment 'self', X-Recruiting: /#/jobs (info leak/easter egg). robots.txt discloses Disallow: /ftp (hidden path). Path probe results: / (200, Angular SPA index.html), /rob",
+      "discoveredAt": "2026-08-02T22:52:11.269Z"
+    }
+  ]
+}

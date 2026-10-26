@@ -1,0 +1,55 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-03T02:17:29.685Z",
+  "durationMs": 341197,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 5,
+  "findings": [
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "JSON product results. GET /rest/products/search?q=apple' returned 500 with an unhandled SQLite error page revealing raw DB error \"SQLITE_ERROR: near \\\"'%'\\\": syntax error\", confirming the q parameter is concatenated unsanitized into a SQL query — a SQL Injection vulnerability (OWASP A03:2021 Injection) at this endpoint. --- Exploited confirmed SQLi in GET /rest/products/search?q=. Payload q=xxx')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users-- returned attacker-chosen data from the Users table (ema",
+      "discoveredAt": "2026-08-03T02:17:29.685Z"
+    },
+    {
+      "title": "Broken Access Control / IDOR identified",
+      "severity": "HIGH",
+      "category": "BROKEN_ACCESS_CONTROL",
+      "description": "PentestGPT (agentic) confirmou broken access control / idor identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "/ no behavior change from the parameter. --- Unauthenticated GET /rest/user/whoami returns HTTP 200 with body {\"user\":{}} — an empty user object. No authenticated-user data (id, email, role, tokens) is disclosed without credentials, so this is not a broken access control finding. --- GET /rest/products/search?q=apple returned 200 with valid JSON product results. GET /rest/products/search?q=apple' returned 500 with an unhandled SQLite error page revealing raw DB error \"SQLITE_ERROR: near \\\"'%'\\\": syntax error\", confi",
+      "discoveredAt": "2026-08-03T02:17:29.685Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "root (/), REST API namespace under /rest/ (confirmed live endpoint /rest/admin/application-version returning {\"version\":\"19.2.1\"}), legacy /api/ Sequelize-backed endpoints (confirmed /api/Products returning full product catalog JSON), and an exposed /ftp/ directory listing endpoint serving HTML content (likely directory listing of files, common Juice Shop vuln surface). Server stack fingerprinted as Node/Express (Juice Shop) via headers and JSON API shape. --- Probed common paths on http://localhost",
+      "discoveredAt": "2026-08-03T02:17:29.685Z"
+    },
+    {
+      "title": "Information disclosure",
+      "severity": "MEDIUM",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou information disclosure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ingerprints (X-Recruiting: /#/jobs custom header, Access-Control-Allow-Origin: *, X-Content-Type-Options, X-Frame-Options, Feature-Policy). Discovered surface: static SPA root (/), REST API namespace under /rest/ (confirmed live endpoint /rest/admin/application-version returning {\"version\":\"19.2.1\"}), legacy /api/ Sequelize-backed endpoints (confirmed /api/Products returning full product catalog JSON), and an exposed /ftp/ directory listing endpoint serving HTML content (likely directory listing of files, common J",
+      "discoveredAt": "2026-08-03T02:17:29.685Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Target identified as OWASP Juice Shop v19.2.1. Root response headers reveal security misconfig-relevant fingerprints (X-Recruiting: /#/jobs custom header, Access-Control-Allow-Origin: *, X-Content-Type-Options, X-Frame-Options, Feature-Policy). Discovered surface: static SPA root (/), REST API namespace under /rest/ (confirmed live endpoint /rest/admin/application-version returning {\"version\":\"19.2.1\"}), legacy /api/ Sequelize-back",
+      "discoveredAt": "2026-08-03T02:17:29.685Z"
+    }
+  ]
+}

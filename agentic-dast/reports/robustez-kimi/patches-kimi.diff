@@ -1,0 +1,167 @@
+diff --git a/agentic-dast/src/cognitive/LLMClient.ts b/agentic-dast/src/cognitive/LLMClient.ts
+index 7a17303..c360bfb 100644
+--- a/agentic-dast/src/cognitive/LLMClient.ts
++++ b/agentic-dast/src/cognitive/LLMClient.ts
+@@ -65,7 +65,7 @@ class OpenRouterClient implements LLMClient {
+         `${this.baseUrl}/chat/completions`,
+         {
+           model: this.model,
+-          max_tokens: 2048,
++          max_tokens: config.llmMaxTokens,
+           messages: [
+             // Prompt Caching estilo Anthropic via OpenRouter: o campo
+             // 'content' de string vira array de blocos com cache_control
+@@ -110,7 +110,18 @@ class OpenRouterClient implements LLMClient {
+         throw new Error(`OpenRouter HTTP ${response.status}: ${errMsg}`);
+       }
+ 
+-      const content = response.data?.choices?.[0]?.message?.content;
++      // Rodada Kimi (out/2026): modelos que raciocinam (Kimi K2.7) as
++      // vezes devolvem 'content' nulo e colocam a resposta no campo
++      // 'reasoning'. O codigo da rodada com Haiku so lia 'content' e
++      // abortava. Usa 'reasoning' como fallback; so falha se os dois
++      // estiverem vazios.
++      const msg = response.data?.choices?.[0]?.message;
++      let content: string | undefined =
++        typeof msg?.content === 'string' && msg.content.trim().length > 0
++          ? msg.content
++          : (typeof msg?.reasoning === 'string' && msg.reasoning.trim().length > 0
++              ? msg.reasoning
++              : undefined);
+       if (typeof content !== 'string') {
+         throw new Error(
+           `OpenRouter retornou resposta inesperada: ${JSON.stringify(response.data).substring(0, 500)}`,
+@@ -171,7 +182,7 @@ class AnthropicClient implements LLMClient {
+   async chat(systemPrompt: string, history: ChatMessage[]): Promise<string> {
+     const response = await this.client.messages.create({
+       model: config.llmModel,
+-      max_tokens: 2048,
++      max_tokens: config.llmMaxTokens,
+       system: [
+         {
+           type: 'text',
+diff --git a/agentic-dast/src/config.ts b/agentic-dast/src/config.ts
+index adae4f8..699319e 100644
+--- a/agentic-dast/src/config.ts
++++ b/agentic-dast/src/config.ts
+@@ -80,5 +80,9 @@ export const config = {
+ 
+   // ── Comportamento do agente ────────────────────────────────
+   maxReactIterations: parseInt(optional('MAX_REACT_ITERATIONS', '25')),
++  // Rodada Kimi (out/2026): limite de tokens de saida por chamada ao LLM.
++  // 2048 (valor da rodada com Haiku) corta as respostas de modelos que
++  // raciocinam antes de responder, como o Kimi K2.7.
++  llmMaxTokens: parseInt(optional('LLM_MAX_TOKENS', '2048')),
+   useZapProxy:        _useZapProxy,
+ } as const;
+diff --git a/agentic-dast/src/executor/abilities/BrowseTheWeb.ts b/agentic-dast/src/executor/abilities/BrowseTheWeb.ts
+index 96e350a..9373ab2 100644
+--- a/agentic-dast/src/executor/abilities/BrowseTheWeb.ts
++++ b/agentic-dast/src/executor/abilities/BrowseTheWeb.ts
+@@ -15,9 +15,32 @@
+ import puppeteer, { Browser, Page } from 'puppeteer';
+ import { config } from '../../config';
+ 
++/**
++ * Rodada Kimi (out/2026): o prompt apresenta o alvo como TARGET_URL
++ * (http://localhost:3000). Com o proxy ZAP ativo, uma URL absoluta em
++ * localhost chegava ao ZAP literal e, de dentro do container, 'localhost'
++ * e o proprio ZAP (HTTP 502). Reescreve a origem de loopback do alvo para
++ * config.browserBaseUrl (juice-shop:3000), como ja era feito para URLs
++ * relativas. Sem proxy, browserBaseUrl === targetUrl e nada muda.
++ */
++function rewriteLoopback(url: string): string {
++  try {
++    const u = new URL(url);
++    const target = new URL(config.targetUrl);
++    const base = new URL(config.browserBaseUrl);
++    const loopback = ['localhost', '127.0.0.1', target.hostname];
++    if (loopback.includes(u.hostname) && (u.port || '80') === (target.port || '80') && base.host !== u.host) {
++      u.protocol = base.protocol;
++      u.host = base.host;
++      return u.toString();
++    }
++  } catch { /* URL invalida: devolve como veio */ }
++  return url;
++}
++
+ /** Resolve URL relativa contra o targetUrl (mesmo helper do HttpClient) */
+ function resolveUrl(url: string): string {
+-  if (/^https?:\/\//i.test(url)) return url;
++  if (/^https?:\/\//i.test(url)) return rewriteLoopback(url);
+   try {
+     return new URL(url, config.browserBaseUrl).toString();
+   } catch {
+diff --git a/agentic-dast/src/executor/abilities/HttpClient.ts b/agentic-dast/src/executor/abilities/HttpClient.ts
+index 1384219..bc36df8 100644
+--- a/agentic-dast/src/executor/abilities/HttpClient.ts
++++ b/agentic-dast/src/executor/abilities/HttpClient.ts
+@@ -13,6 +13,29 @@
+ import axios, { AxiosRequestConfig } from 'axios';
+ import { config } from '../../config';
+ 
++/**
++ * Rodada Kimi (out/2026): o prompt apresenta o alvo como TARGET_URL
++ * (http://localhost:3000). Com o proxy ZAP ativo, uma URL absoluta em
++ * localhost chegava ao ZAP literal e, de dentro do container, 'localhost'
++ * e o proprio ZAP (HTTP 502). Reescreve a origem de loopback do alvo para
++ * config.browserBaseUrl (juice-shop:3000), como ja era feito para URLs
++ * relativas. Sem proxy, browserBaseUrl === targetUrl e nada muda.
++ */
++function rewriteLoopback(url: string): string {
++  try {
++    const u = new URL(url);
++    const target = new URL(config.targetUrl);
++    const base = new URL(config.browserBaseUrl);
++    const loopback = ['localhost', '127.0.0.1', target.hostname];
++    if (loopback.includes(u.hostname) && (u.port || '80') === (target.port || '80') && base.host !== u.host) {
++      u.protocol = base.protocol;
++      u.host = base.host;
++      return u.toString();
++    }
++  } catch { /* URL invalida: devolve como veio */ }
++  return url;
++}
++
+ /**
+  * Resolve uma URL que pode vir relativa (ex: "/api/Users") contra a
+  * URL-base do alvo. Necessário porque o LLM, ao gerar make_request,
+@@ -26,7 +49,7 @@ import { config } from '../../config';
+  * pela Docker network 'dast-net' (mesma logica do Chrome/Puppeteer).
+  */
+ function resolveUrl(url: string): string {
+-  if (/^https?:\/\//i.test(url)) return url;
++  if (/^https?:\/\//i.test(url)) return rewriteLoopback(url);
+   try {
+     return new URL(url, config.browserBaseUrl).toString();
+   } catch {
+diff --git a/agentic-dast/src/scenarios/pentestgpt/run_pentestgpt.py b/agentic-dast/src/scenarios/pentestgpt/run_pentestgpt.py
+index 9d2fda9..1557836 100644
+--- a/agentic-dast/src/scenarios/pentestgpt/run_pentestgpt.py
++++ b/agentic-dast/src/scenarios/pentestgpt/run_pentestgpt.py
+@@ -168,6 +168,25 @@ def _invoke_pentestgpt(target_url: str, runs_root: Path, run_id: str) -> Path:
+                   f"(evita conflito com o login OAuth do Claude Code)",
+                   flush=True)
+ 
++    # Rodada Kimi (out/2026): roteia o Claude Code para o endpoint
++    # compativel com a API da Anthropic do OpenRouter, para que o
++    # Cenario D use o mesmo modelo do Cenario C. Todas as camadas de
++    # modelo do Claude Code (principal e subagentes) apontam para ele.
++    if os.getenv("PENTESTGPT_LLM_ROUTE", "").strip().lower() == "openrouter":
++        or_key = os.getenv("OPENROUTER_API_KEY", "").strip()
++        if not or_key:
++            raise RuntimeError("PENTESTGPT_LLM_ROUTE=openrouter exige OPENROUTER_API_KEY")
++        routed_model = model or os.getenv("OPENROUTER_MODEL", "").strip()
++        child_env["ANTHROPIC_BASE_URL"] = "https://openrouter.ai/api"
++        child_env["ANTHROPIC_AUTH_TOKEN"] = or_key
++        child_env["ANTHROPIC_API_KEY"] = ""
++        for var in ("ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL",
++                    "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL",
++                    "ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL"):
++            child_env[var] = routed_model
++        print(f"[run_pentestgpt] Claude Code roteado via OpenRouter, modelo={routed_model}",
++              flush=True)
++
+     # stdio inherit para o usuario ver o progresso do agente em tempo real.
+     proc = subprocess.run(cmd, cwd=str(runs_root.parent),
+                           text=True, env=child_env)

@@ -1,0 +1,73 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-04T00:35:18.986Z",
+  "durationMs": 263571,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 7,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "login POST /rest/user/login with nonexistent credentials returned 401 \"Invalid email or password.\" The SQLi derivative {\"email\":\"' OR 1=1--\",\"password\":\"x\"} returned 200 with a full authentication JWT for admin@juice-sh.op (role: admin), confirming SQL injection auth bypass. The nearby variant {\"email\":\"admin' -- \",\"password\":\"x\"} returned 401, indicating the vulnerable query relies on the trailing quote/comment syntax of the first payload succeeding against the stored hash comparison while this variant did not match.",
+      "discoveredAt": "2026-08-04T00:35:18.986Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "login POST /rest/user/login with nonexistent credentials returned 401 \"Invalid email or password.\" The SQLi derivative {\"email\":\"' OR 1=1--\",\"password\":\"x\"} returned 200 with a full authentication JWT for admin@juice-sh.op (role: admin), confirming SQL injection auth bypass. The nearby variant {\"email\":\"admin' -- \",\"password\":\"x\"} returned 401, indicating the vulnerable query relies on the trailing quote/comment syntax of the first payload succeeding against the stored hash comparison while this variant did",
+      "discoveredAt": "2026-08-04T00:35:18.986Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "est/user/login with nonexistent credentials returned 401 \"Invalid email or password.\" The SQLi derivative {\"email\":\"' OR 1=1--\",\"password\":\"x\"} returned 200 with a full authentication JWT for admin@juice-sh.op (role: admin), confirming SQL injection auth bypass. The nearby variant {\"email\":\"admin' -- \",\"password\":\"x\"} returned 401, indicating the vulnerable query relies on the trailing quote/comment syntax of the first payload succeeding against the stored hash comparison while this variant did not match.",
+      "discoveredAt": "2026-08-04T00:35:18.986Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "auth), /rest/user/whoami (200, empty user object), /rest/admin/application-version (200, version disclosure), /api/ (500, unexpected path error page), /assets/, /main.js, /manifest.json (200, SPA bundle/assets served), robots.txt discloses Disallow: /ftp which itself is browsable (200) with directory listing enabled, exposing sensitive files including a KeePass database, encrypted announcement, backup package files, and a suspicious errors yml. /#/jobs SPA route resolves to the Angular app shell (20",
+      "discoveredAt": "2026-08-04T00:35:18.986Z"
+    },
+    {
+      "title": "Information disclosure",
+      "severity": "MEDIUM",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou information disclosure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "quiring auth, confirms ORM-backed API layer). These match known Juice Shop routes (/rest/*, /api/*, /#/ Angular SPA hash routes including /#/jobs). --- Probed common paths on http://localhost:3000 (OWASP Juice Shop v19.2.1, confirmed via /rest/admin/application-version). Findings: /rest/products/search (200, returns full product JSON, no auth), /rest/user/whoami (200, empty user object), /rest/admin/application-version (200, version disclosure), /api/ (500, unexpected path error page), /assets/, /main.js, /manifes",
+      "discoveredAt": "2026-08-04T00:35:18.986Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Enumerated surface of http://localhost:3000. Technology fingerprint: OWASP Juice Shop (title \"OWASP Juice Shop\"), Express/Node.js backend inferred from headers. Response headers on / include Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, Feature-Policy: payment 'self', and a custom X-Recruiting: /#/jobs header (info leak revealing hidden SPA route). No Set-Cookie observed on initial GET. robots.txt returns 200 (28 bytes)",
+      "discoveredAt": "2026-08-04T00:35:18.986Z"
+    },
+    {
+      "title": "Path traversal",
+      "severity": "HIGH",
+      "category": "PATH_TRAVERSAL",
+      "description": "PentestGPT (agentic) confirmou path traversal durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "(200). --- Confirmed security misconfiguration: /ftp/acquisitions.md returns HTTP 200 with confidential business document content, no auth required. /ftp/package.json.bak returns HTTP 403 \"Only .md and .pdf files are allowed!\" (extension whitelist). Path traversal test /ftp/..%2f..%2fpackage.json returns HTTP 403 ForbiddenError (distinct from extension error, indicating dedicated traversal guard) - traversal outside /ftp/ is NOT possible. Controls confirm normal behavior: /ftp/legal.md (legitimate, existing)",
+      "discoveredAt": "2026-08-04T00:35:18.986Z"
+    }
+  ]
+}

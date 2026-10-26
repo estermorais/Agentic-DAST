@@ -1,0 +1,46 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-03T18:59:37.402Z",
+  "durationMs": 173124,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 4,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "HTTP 200 with a valid signed JWT auth token for admin@juice-sh.op (bypass confirmed). Both controls (invalid credentials, benign non-special-character credentials) returned HTTP 401 \"Invalid email or password.\" — response clearly differs, confirming SQL injection authentication bypass on the login endpoint. --- Used the admin JWT obtained via SQLi auth bypass to call GET /api/Users/1 with Authorization: Bearer <token>, which returned the full admin user record (email admin@juice-sh.op, role admin), confirming full admin account takeover impac",
+      "discoveredAt": "2026-08-03T18:59:37.402Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "HTTP 200 with a valid signed JWT auth token for admin@juice-sh.op (bypass confirmed). Both controls (invalid credentials, benign non-special-character credentials) returned HTTP 401 \"Invalid email or password.\" — response clearly differs, confirming SQL injection authentication bypass on the login endpoint. --- Used the admin JWT obtained via SQLi auth bypass to call GET /api/Users/1 with Authorization: Bearer <token>, which returned the full admin user record (email admin@juice-sh.op, role admin), confirmin",
+      "discoveredAt": "2026-08-03T18:59:37.402Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "a valid signed JWT auth token for admin@juice-sh.op (bypass confirmed). Both controls (invalid credentials, benign non-special-character credentials) returned HTTP 401 \"Invalid email or password.\" — response clearly differs, confirming SQL injection authentication bypass on the login endpoint. --- Used the admin JWT obtained via SQLi auth bypass to call GET /api/Users/1 with Authorization: Bearer <token>, which returned the full admin user record (email admin@juice-sh.op, role admin), confirming full admin account t",
+      "discoveredAt": "2026-08-03T18:59:37.402Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "\", header X-Recruiting: /#/jobs, and standard security headers (X-Content-Type-Options, X-Frame-Options, Feature-Policy). Discovered reachable surface: /robots.txt (200), /sitemap.xml (200), /rest/user/whoami (200 - REST API namespace under /rest/), /ftp/ (200 - exposed static file directory, known Juice Shop vuln vector), /.well-known/security.txt (200). /api/ returned 500 (endpoint exists, likely needs sub-route/params - Sequelize REST API namespace). This gives a base surface map (Angular fronten",
+      "discoveredAt": "2026-08-03T18:59:37.402Z"
+    }
+  ]
+}

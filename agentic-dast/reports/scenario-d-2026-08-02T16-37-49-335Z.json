@@ -1,0 +1,46 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-02T16:37:49.332Z",
+  "durationMs": 198282,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 4,
+  "findings": [
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "), and other internal configuration not otherwise exposed. Verdict: confirmed Broken Access Control / Sensitive Information Disclosure (OWASP A01/A05) — an admin-namespaced endpoint is reachable without authentication and leaks sensitive config. --- SQL injection confirmed on GET /rest/products/search (q parameter). Baseline q=apple returned 200 with normal product JSON. q=' returned 200 with empty result set (silently swallowed/altered query). A syntax-preserving UNION payload q=apple') UNION SELECT id,emai",
+      "discoveredAt": "2026-08-02T16:37:49.332Z"
+    },
+    {
+      "title": "Broken Access Control / IDOR identified",
+      "severity": "HIGH",
+      "category": "BROKEN_ACCESS_CONTROL",
+      "description": "PentestGPT (agentic) confirmou broken access control / idor identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "includes Google OAuth clientId and its full authorizedRedirects whitelist, CTF/admin-only settings (csafHashValue, xssBonusPayload, overwriteUrlForProductTamperingChallenge), and other internal configuration not otherwise exposed. Verdict: confirmed Broken Access Control / Sensitive Information Disclosure (OWASP A01/A05) — an admin-namespaced endpoint is reachable without authentication and leaks sensitive config. --- SQL injection confirmed on GET /rest/products/search (q parameter). Baseline q=apple returned 200 w",
+      "discoveredAt": "2026-08-02T16:37:49.332Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "JSON product search API, Sequelize-backed, returns id/name/description/price/image/createdAt/updatedAt/deletedAt fields), GET /api/Users (Sequelize REST endpoint, protected by JWT — returns UnauthorizedError: No Authorization header was found), GET /ftp/ (static asset directory, 200 OK, 11322 bytes — directory listing of files). Static asset path /assets/public/favicon_js.ico referenced in HTML head. --- Probed common OWASP Juice Shop-style paths on http://localhost:3000. Confirmed live endpoints:",
+      "discoveredAt": "2026-08-02T16:37:49.332Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Enumerated target http://localhost:3000 surface. Fingerprint: OWASP Juice Shop (Node/Express + Angular SPA). Root headers show X-Recruiting: /#/jobs, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, Feature-Policy: payment 'self', Access-Control-Allow-Origin: *. Discovered endpoints: GET /rest/products/search?q= (public JSON product search API, Sequelize-backed, returns id/name/description/price/image/createdAt/updatedAt/deletedAt fields), GET /api/Users (Sequelize REST endpoint, protected by JWT — returns",
+      "discoveredAt": "2026-08-02T16:37:49.332Z"
+    }
+  ]
+}

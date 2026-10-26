@@ -1,0 +1,46 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-03T18:45:27.042Z",
+  "durationMs": 304687,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 4,
+  "findings": [
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ts/search (200), /api/Users (401, requires auth), /rest/admin/application-version (200, discloses {\"version\":\"19.2.1\"}), /manifest.json (200). --- Injection payload email=' OR 1=1--, password=x on POST /rest/user/login returned HTTP 200 with a valid admin JWT (admin@juice-sh.op), confirming SQLi auth bypass; control invalid-credential request returned HTTP 401 Invalid email or password. --- POST /rest/user/login with email=' OR 1=1--&password=x returned HTTP 200 with a valid JWT authentication token for",
+      "discoveredAt": "2026-08-03T18:45:27.042Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "(200 OK, Angular/Express app, 75002 bytes) served with headers Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, X-Recruiting: /#/jobs (custom header leaking a hidden route). robots.txt discloses Disallow: /ftp (hidden static asset directory). /rest/admin/application-version returns {\"version\":\"19.2.1\"} confirming exact framework version. /api-docs redirects to /api-docs/ (Swagger/OpenAPI REST API documentation endpoint). Combined this maps routes (/#/jobs",
+      "discoveredAt": "2026-08-03T18:45:27.042Z"
+    },
+    {
+      "title": "Information disclosure",
+      "severity": "MEDIUM",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou information disclosure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "with headers Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, X-Recruiting: /#/jobs (custom header leaking a hidden route). robots.txt discloses Disallow: /ftp (hidden static asset directory). /rest/admin/application-version returns {\"version\":\"19.2.1\"} confirming exact framework version. /api-docs redirects to /api-docs/ (Swagger/OpenAPI REST API documentation endpoint). Combined this maps routes (/#/jobs, /ftp), REST endpoints (/rest/admin/application-version, /api-do",
+      "discoveredAt": "2026-08-03T18:45:27.042Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Target is OWASP Juice Shop v19.2.1. Root page (200 OK, Angular/Express app, 75002 bytes) served with headers Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, X-Recruiting: /#/jobs (custom header leaking a hidden route). robots.txt discloses Disallow: /ftp (hidden static asset directory). /rest/admin/application-version returns {\"version\":\"19.",
+      "discoveredAt": "2026-08-03T18:45:27.042Z"
+    }
+  ]
+}

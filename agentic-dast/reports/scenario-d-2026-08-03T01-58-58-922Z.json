@@ -1,0 +1,73 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-03T01:58:58.919Z",
+  "durationMs": 368635,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 7,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "=' OR 1=1--  and password=anything returned HTTP 200 with a valid JWT authentication token for admin@juice-sh.op, whereas the control request with a non-matching well-formed email/password returned HTTP 401 \"Invalid email or password.\" This confirms SQL injection authentication bypass on the login endpoint. --- POST /rest/user/login with email=' OR 1=1-- and password=x returned STATUS:200 with a valid JWT auth token for admin@juice-sh.op (role admin), while both controls (valid-format non-matching email, and plain invalid email) returned STAT",
+      "discoveredAt": "2026-08-03T01:58:58.919Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "=' OR 1=1--  and password=anything returned HTTP 200 with a valid JWT authentication token for admin@juice-sh.op, whereas the control request with a non-matching well-formed email/password returned HTTP 401 \"Invalid email or password.\" This confirms SQL injection authentication bypass on the login endpoint. --- POST /rest/user/login with email=' OR 1=1-- and password=x returned STATUS:200 with a valid JWT auth token for admin@juice-sh.op (role admin), while both controls (valid-format non-matching email, and",
+      "discoveredAt": "2026-08-03T01:58:58.919Z"
+    },
+    {
+      "title": "Cross-Site Scripting (XSS) identified",
+      "severity": "HIGH",
+      "category": "XSS",
+      "description": "PentestGPT (agentic) confirmou cross-site scripting (xss) identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "arch?q=apple (control) vs q=<iframe src=\"javascript:alert(1)\"> (payload). Control returned 200 with matching product data. Payload query returned 200 with an empty data array — the payload string is not reflected anywhere in the response body, so no reflected XSS is present at this endpoint for this input. --- GET /rest/basket/2 with no Authorization header returns 401 Unauthorized (\"No Authorization header was found\"), unlike the same request with the admin JWT which returned 200 with basket data (id=2, Use",
+      "discoveredAt": "2026-08-03T01:58:58.919Z"
+    },
+    {
+      "title": "Broken Access Control / IDOR identified",
+      "severity": "HIGH",
+      "category": "BROKEN_ACCESS_CONTROL",
+      "description": "PentestGPT (agentic) confirmou broken access control / idor identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "s with Authorization: Bearer header, returning HTTP 200 with the full admin user list. An unauthenticated control request to the same endpoint returned HTTP 401. This confirms the bypass-derived token grants genuine admin-level access. --- Confirmed IDOR on GET /rest/basket/:id. --- Compared GET /rest/products/search?q=apple (control) vs q=<iframe src=\"javascript:alert(1)\"> (payload). Control returned 200 with matching product data. Payload query returned 200 with an empty data array — the payload s",
+      "discoveredAt": "2026-08-03T01:58:58.919Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "nd password=anything returned HTTP 200 with a valid JWT authentication token for admin@juice-sh.op, whereas the control request with a non-matching well-formed email/password returned HTTP 401 \"Invalid email or password.\" This confirms SQL injection authentication bypass on the login endpoint. --- POST /rest/user/login with email=' OR 1=1-- and password=x returned STATUS:200 with a valid JWT auth token for admin@juice-sh.op (role admin), while both controls (valid-format non-matching email, and plain invalid email)",
+      "discoveredAt": "2026-08-03T01:58:58.919Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "dex.html with hash-based routing. Discovered REST/API surface: /rest/products/search (200 JSON), /rest/user/whoami (200 JSON), /rest/admin/application-configuration (200 JSON, config disclosure), /api/Users (401, Sequelize REST endpoint auth-gated), /ftp (200 HTML listing), /.well-known/security.txt (200), /sitemap.xml (200, SPA HTML not real sitemap), /api (500 Internal Server Error, framework error leak). All responses set Access-Control-Allow-Origin: * (broad CORS). --- POST /rest/user/login with",
+      "discoveredAt": "2026-08-03T01:58:58.919Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "fig disclosure), /api/Users (401, Sequelize REST endpoint auth-gated), /ftp (200 HTML listing), /.well-known/security.txt (200), /sitemap.xml (200, SPA HTML not real sitemap), /api (500 Internal Server Error, framework error leak). All responses set Access-Control-Allow-Origin: * (broad CORS). --- POST /rest/user/login with email=' OR 1=1--  and password=anything returned HTTP 200 with a valid JWT authentication token for admin@juice-sh.op, whereas the control request with a non-matching well-formed email/password returned H",
+      "discoveredAt": "2026-08-03T01:58:58.919Z"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-03T18:55:30.182Z",
+  "durationMs": 181315,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 3,
+  "findings": [
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "user/authentication-details/, /rest/user/login, /rest/user/reset-password, /rest/wallet/balance. --- SQLi payload email=' OR 1=1-- against POST /rest/user/login returned HTTP 200 with a valid JWT token for admin@juice-sh.op (role: admin), confirming authentication bypass. Control request with invalid credentials returned HTTP 401 \"Invalid email or password.\" --- HTTP/1.1 200 OK\r Access-Control-Allow-Origin: *\r X-Content-Type-Options: nosniff\r X-Frame-Options: SAMEORIGIN\r Feature-Policy: payment 'self'\r X-Recruiting:",
+      "discoveredAt": "2026-08-03T18:55:30.182Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Enumerated surface of http://localhost:3000, identified as OWASP Juice Shop. Response headers reveal Express server, missing security headers of note, and an X-Recruiting header leaking a hidden route (/#/jobs). robots.txt discloses a disallowed /ftp path. /api/ endpoint exists (returns 500 without params), and /rest/products returns 500, confirming a REST API surface under /rest and /api. --- Probed the 7 listed surface paths against http://localhost:3000: /robots.txt (200, real, Disallow: /ftp",
+      "discoveredAt": "2026-08-03T18:55:30.182Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "gainst POST /rest/user/login returned HTTP 200 with a valid JWT token for admin@juice-sh.op (role: admin), confirming authentication bypass. Control request with invalid credentials returned HTTP 401 \"Invalid email or password.\" --- HTTP/1.1 200 OK\r Access-Control-Allow-Origin: *\r X-Content-Type-Options: nosniff\r X-Frame-Options: SAMEORIGIN\r Feature-Policy: payment 'self'\r X-Recruiting: /#/jobs\r Accept-Ranges: bytes\r Cache-Control: public, max-age=0\r Last-Modified: Mon, 03 Aug 2026 18:51:25 GMT\r ETag: W/\"124fa-19fc8f7696b\"",
+      "discoveredAt": "2026-08-03T18:55:30.182Z"
+    }
+  ]
+}

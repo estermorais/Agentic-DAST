@@ -1,0 +1,82 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-03T18:33:23.715Z",
+  "durationMs": 255833,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 8,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "-- Baseline invalid login to /rest/user/login returned 401 \"Invalid email or password.\" SQLi payload {\"email\":\"' OR 1=1--\",\"password\":\"x\"} returned 200 with a valid JWT authentication token for admin@juice-sh.op, confirming authentication bypass via SQL injection on the login endpoint. --- Access-Control-Allow-Origin: *\r X-Content-Type-Options: nosniff\r X-Frame-Options: SAMEORIGIN\r Feature-Policy: payment 'self'\r X-Recruiting: /#/jobs --- User-agent: * Disallow: /ftp --- STATUS:500 SIZE:994\r ---QUOTE--- <html>   <head>",
+      "discoveredAt": "2026-08-03T18:33:23.715Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ontrol (q=apple' → 500 with raw SQLite syntax error, confirming unsanitized string concatenation into SQL), and injection payload (q=apple'))-- → 200 with empty result set, showing the comment sequence altered query structure). This confirms classic SQL injection in the search endpoint. --- UNION-based SQLi against /rest/products/search?q= confirmed with full data extraction of user emails and password hashes. --- Unauthenticated GET /rest/user/whoami returned HTTP 200 with body {\"user\":{}} (no auth enforced",
+      "discoveredAt": "2026-08-03T18:33:23.715Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "s unauthenticated state. --- Baseline invalid login to /rest/user/login returned 401 \"Invalid email or password.\" SQLi payload {\"email\":\"' OR 1=1--\",\"password\":\"x\"} returned 200 with a valid JWT authentication token for admin@juice-sh.op, confirming authentication bypass via SQL injection on the login endpoint. --- Access-Control-Allow-Origin: *\r X-Content-Type-Options: nosniff\r X-Frame-Options: SAMEORIGIN\r Feature-Policy: payment 'self'\r X-Recruiting: /#/jobs --- User-agent: * Disallow: /ftp --- STATUS:500 SIZE:994",
+      "discoveredAt": "2026-08-03T18:33:23.715Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "s/X-Frame-Options set but no CSP. Page title \"OWASP Juice Shop\"; static assets served: polyfills.js, scripts.js, main.js, styles.css. Open REST API at /rest/products/search?q= returns full product JSON without auth (unauthenticated data disclosure). /ftp/ returns HTTP 200 (exposed file listing path, known Juice Shop vuln surface for file access/directory traversal). /api/Users is a Sequelize-backed REST endpoint protected by JWT, returning \"UnauthorizedError: No Authorization header was found\" when",
+      "discoveredAt": "2026-08-03T18:33:23.715Z"
+    },
+    {
+      "title": "Information disclosure",
+      "severity": "MEDIUM",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou information disclosure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "surface on http://localhost:3000: robots.txt discloses Disallow: /ftp (200 OK, hidden FTP path); /rest/products/search?q= returns product JSON (SQLi-testable search endpoint); /rest/user/whoami returns {\"user\":{}} unauthenticated (200); /rest/admin/application-version discloses app version 19.2.1 (200), confirming this is OWASP Juice Shop v19.2.1; /api/ returns 500; /.well-known/ and /sitemap.xml return 200. --- Tested /rest/products/search?q= with baseline (q=apple → 200, normal JSON results), quote control (q=a",
+      "discoveredAt": "2026-08-03T18:33:23.715Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Target is OWASP Juice Shop (Express/Node backend, Angular SPA frontend). Root response headers reveal X-Recruiting: /#/jobs (custom app header), Access-Control-Allow-Origin: * (permissive CORS), X-Content-Type-Options/X-Frame-Options set but no CSP. Page title \"OWASP Juice Shop\"; static assets served: polyfills.js, scripts.js, main.js, styles.css. Open REST API at /rest/products/search?q= returns full product JSON without",
+      "discoveredAt": "2026-08-03T18:33:23.715Z"
+    },
+    {
+      "title": "Missing security headers",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou missing security headers durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Target is OWASP Juice Shop (Express/Node backend, Angular SPA frontend). Root response headers reveal X-Recruiting: /#/jobs (custom app header), Access-Control-Allow-Origin: * (permissive CORS), X-Content-Type-Options/X-Frame-Options set but no CSP. Page title \"OWASP Juice Shop\"; static assets served: polyfills.js, scripts.js, main.js, styles.css. Open REST API at /rest/products/search?q= returns full product JSON without auth (unauthenticated data disclosure). /ftp/ returns HTTP 200 (exposed",
+      "discoveredAt": "2026-08-03T18:33:23.715Z"
+    },
+    {
+      "title": "Path traversal",
+      "severity": "HIGH",
+      "category": "PATH_TRAVERSAL",
+      "description": "PentestGPT (agentic) confirmou path traversal durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "js, scripts.js, main.js, styles.css. Open REST API at /rest/products/search?q= returns full product JSON without auth (unauthenticated data disclosure). /ftp/ returns HTTP 200 (exposed file listing path, known Juice Shop vuln surface for file access/directory traversal). /api/Users is a Sequelize-backed REST endpoint protected by JWT, returning \"UnauthorizedError: No Authorization header was found\" when unauthenticated (verbose stack-trace-style error page leaking framework internals - error handling/information d",
+      "discoveredAt": "2026-08-03T18:33:23.715Z"
+    }
+  ]
+}

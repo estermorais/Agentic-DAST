@@ -1,0 +1,64 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-02T21:29:58.156Z",
+  "durationMs": 180799,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 6,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": ".com\",\"password\":\"a\"} returned 401 \"Invalid email or password.\" The SQLi payload {\"email\":\"' OR 1=1-- \",\"password\":\"a\"} returned HTTP 200 with a valid JWT authentication token for the admin account (email admin@juice-sh.op, role admin) — a confirmed SQL injection authentication bypass in the login query. The nearby control (escaped-quote variant) returned 500, but that was a JSON body-parser SyntaxError (\"Bad escaped character in JSON\"), not a SQL error, so it does not itself indicate SQLi — the injection is proven by the 200/token result ins",
+      "discoveredAt": "2026-08-02T21:29:58.156Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": ".com\",\"password\":\"a\"} returned 401 \"Invalid email or password.\" The SQLi payload {\"email\":\"' OR 1=1-- \",\"password\":\"a\"} returned HTTP 200 with a valid JWT authentication token for the admin account (email admin@juice-sh.op, role admin) — a confirmed SQL injection authentication bypass in the login query. The nearby control (escaped-quote variant) returned 500, but that was a JSON body-parser SyntaxError (\"Bad escaped character in JSON\"), not a SQL error, so it does not itself indicate SQLi — the injection is",
+      "discoveredAt": "2026-08-02T21:29:58.156Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "d\":\"a\"} returned 401 \"Invalid email or password.\" The SQLi payload {\"email\":\"' OR 1=1-- \",\"password\":\"a\"} returned HTTP 200 with a valid JWT authentication token for the admin account (email admin@juice-sh.op, role admin) — a confirmed SQL injection authentication bypass in the login query. The nearby control (escaped-quote variant) returned 500, but that was a JSON body-parser SyntaxError (\"Bad escaped character in JSON\"), not a SQL error, so it does not itself indicate SQLi — the injection is proven by the 200/tok",
+      "discoveredAt": "2026-08-02T21:29:58.156Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "REST API under /api/ requiring bearer-token auth. --- Target identified as OWASP Juice Shop (Angular SPA). Enumerated endpoint surface via bounded curl probes: /rest/products/search?q=a=200, /rest/user/whoami=200, /api/Users=401, /api/Products=200, /ftp=200, /rest/admin/application-version=200, /rest/user/login=500, /rest/basket/1=401, /.well-known/security.txt=200, /rest/products/1/reviews=200, plus client-side route /#/jobs seen in X-Recruiting header. These give a concrete list of REST/API/stati",
+      "discoveredAt": "2026-08-02T21:29:58.156Z"
+    },
+    {
+      "title": "Information disclosure",
+      "severity": "MEDIUM",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou information disclosure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "requiring bearer-token auth. --- Target identified as OWASP Juice Shop (Angular SPA). Enumerated endpoint surface via bounded curl probes: /rest/products/search?q=a=200, /rest/user/whoami=200, /api/Users=401, /api/Products=200, /ftp=200, /rest/admin/application-version=200, /rest/user/login=500, /rest/basket/1=401, /.well-known/security.txt=200, /rest/products/1/reviews=200, plus client-side route /#/jobs seen in X-Recruiting header. These give a concrete list of REST/API/static paths with methods (GET) and respon",
+      "discoveredAt": "2026-08-02T21:29:58.156Z"
+    },
+    {
+      "title": "CORS misconfiguration (wildcard origin)",
+      "severity": "LOW",
+      "category": "SECURITY_MISCONFIGURATION",
+      "description": "PentestGPT (agentic) confirmou cors misconfiguration (wildcard origin) durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "Target at http://localhost:3000 identified as OWASP Juice Shop (Node.js/Express app with Angular frontend). Root response headers reveal: Access-Control-Allow-Origin: *, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN, Feature-Policy: payment 'self', and a custom X-Recruiting: /#/jobs header disclosing a hidden client-side route. Body served is Angular SPA (index.html, title \"OWASP Juice Shop\", assets/",
+      "discoveredAt": "2026-08-02T21:29:58.156Z"
+    }
+  ]
+}

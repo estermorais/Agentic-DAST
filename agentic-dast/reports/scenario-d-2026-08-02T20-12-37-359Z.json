@@ -1,0 +1,55 @@
+{
+  "scenario": "D",
+  "description": "PentestGPT — controle tecnológico de LLM generalista",
+  "generatedAt": "2026-08-02T20:12:37.356Z",
+  "durationMs": 228403,
+  "targetUrl": "http://localhost:3000",
+  "findingsCount": 5,
+  "findings": [
+    {
+      "title": "SQL Injection at authentication endpoint",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection at authentication endpoint durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "/login returned 401 \"Invalid email or password.\" The injected-email payload email=admin@juice-sh.op' -- with password=anything returned 200 with a valid JWT authentication token and admin user data (email admin@juice-sh.op, role admin), confirming a SQL injection authentication bypass. --- Baseline invalid login (nonexistent@test.com/wrongpass123) returned HTTP 401 \"Invalid email or password.\" Injected email payload admin@juice-sh.op' -- with arbitrary password against /rest/user/login returned HTTP 200 with a valid admin JWT aut",
+      "discoveredAt": "2026-08-02T20:12:37.356Z"
+    },
+    {
+      "title": "SQL Injection identified",
+      "severity": "CRITICAL",
+      "category": "SQL_INJECTION",
+      "description": "PentestGPT (agentic) confirmou sql injection identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "h SQLite syntax error, confirming unsanitized input reaches the backend query. Boolean control q=apple' AND '1'='1 returned 200 with empty data array (query executed without error but altered logic), demonstrating behavioral difference indicative of SQL injection in the q parameter. --- Exploited SQL injection in /rest/products/search q parameter via UNION-based payload q=apple')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users-- , successfully extracting out-of-scope data (all Users table emails and M",
+      "discoveredAt": "2026-08-02T20:12:37.356Z"
+    },
+    {
+      "title": "Authentication bypass identified",
+      "severity": "CRITICAL",
+      "category": "AUTH_BYPASS",
+      "description": "PentestGPT (agentic) confirmou authentication bypass identified durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "d 401 \"Invalid email or password.\" The injected-email payload email=admin@juice-sh.op' -- with password=anything returned 200 with a valid JWT authentication token and admin user data (email admin@juice-sh.op, role admin), confirming a SQL injection authentication bypass. --- Baseline invalid login (nonexistent@test.com/wrongpass123) returned HTTP 401 \"Invalid email or password.\" Injected email payload admin@juice-sh.op' -- with arbitrary password against /rest/user/login returned HTTP 200 with a valid admin JWT aut",
+      "discoveredAt": "2026-08-02T20:12:37.356Z"
+    },
+    {
+      "title": "Sensitive directory/file exposure",
+      "severity": "HIGH",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou sensitive directory/file exposure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "ts.js, styles.css, chunk-*.js bundles) with a distinctive X-Recruiting header pointing to /#/jobs, fingerprinting the app as OWASP Juice Shop. Confirmed live endpoints: /rest/products (500), /rest/user/whoami (200), /api/Users (401 - auth required), /ftp (200, directory listing/asset endpoint), /metrics (200), /.well-known/security.txt (200), /rest/admin/application-configuration (200). No exploitation attempted per discover-task scope. --- Probed known Juice Shop-style REST/API and route paths on h",
+      "discoveredAt": "2026-08-02T20:12:37.356Z"
+    },
+    {
+      "title": "Information disclosure",
+      "severity": "MEDIUM",
+      "category": "SENSITIVE_DATA_EXPOSURE",
+      "description": "PentestGPT (agentic) confirmou information disclosure durante execucao autonoma contra http://localhost:3000.",
+      "steps": [],
+      "evidence": "-> 200; GET /rest/products/search?q=a -> 200; GET /api/Users -> 401 (auth required, sequelize REST API present); GET /ftp -> 200 (directory listing endpoint); GET /#/jobs -> 200 (Angular SPA route, matches X-Recruiting header hint); GET /rest/admin/application-version -> 200; GET /assets/public/images/products -> 301 (redirect, likely to trailing slash/static dir listing); GET /rest/user/whoami -> 200. This confirms /rest/* and /api/* as the two REST surfaces, /ftp as an exposed static/file endpoint, /assets/publ",
+      "discoveredAt": "2026-08-02T20:12:37.356Z"
+    }
+  ]
+}
