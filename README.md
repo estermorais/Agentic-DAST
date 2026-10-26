@@ -3,6 +3,7 @@
 *Framework* de Teste Dinâmico de Segurança de Aplicações (DAST) baseado em **agentes autônomos LLM** para detecção de vulnerabilidades em *Single Page Applications* (SPAs).
 
 Trabalho de Conclusão de Curso em Engenharia de Computação — CEFET-MG.
+
 **Autora:** Ester Morais Neves   |   **Orientador:** Prof. Mateus Felipe Tymburibá Ferreira
 
 ---
