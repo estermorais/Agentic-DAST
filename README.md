@@ -77,7 +77,6 @@ A camada `LLMClient` desacopla o *loop* ReAct do provedor concreto de LLM. As du
     │   ├── report-*.json / scenario-*.json    ← 120 relatórios brutos da rodada oficial
     │   ├── robustez-kimi/                     ← Replicação do Cenário C com Kimi K2.7
     │   └── tcc-artifacts/                     ← Tabelas, figuras e resumos
-    ├── dist/                                  ← JavaScript compilado
     ├── docs/                                  ← Documentação técnica
     ├── targets/                               ← Target Profiles (perfis de alvo)
     ├── docker-compose.yml                     ← Juice Shop + ZAP

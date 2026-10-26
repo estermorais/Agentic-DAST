@@ -11,9 +11,9 @@ node_modules/
 .session-cache/
 agentic-dast/.session-cache/
 
-# Build TypeScript — a pasta dist/ é versionada (contém os .js compilados),
-# mas os arquivos auxiliares (.js.map e .d.ts) são ignorados para manter o
-# diff limpo e o repositório legível.
+# Build TypeScript — a pasta dist/ é gerada por 'npm run build' e NÃO é
+# versionada (artefato de build; regenere localmente após clonar).
+agentic-dast/dist/
 *.js.map
 *.d.ts
 *.d.ts.map
